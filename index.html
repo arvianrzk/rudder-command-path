@@ -1,0 +1,966 @@
+<!doctype html>
+<html lang="id">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>html{color-scheme:light dark}body{margin:0}</style>
+<title>Rudder Command Path | Steering Gear Simulator</title>
+<meta name="description" content="Interactive 3D simulation of a ro-ro ship steering gear: follow a rudder command from the bridge to the ship turning.">
+<meta property="og:title" content="Rudder Command Path">
+<meta property="og:description" content="Interactive 3D simulation of a ro-ro ship steering gear, from bridge command to ship turn.">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Gaya diorama isometrik: krem hangat, air pastel, satu aksen merah, objek putih matte.
+   Layout: panggung 3D penuh dengan judul besar di kiri, kartu putih di kanan, pil tahap di bawah. */
+:root{
+  --bg:#EFECE6; --surface:#FFFFFF; --surface2:#F5F3EE; --ink:#17181A; --muted:#6D6B66; --line:#E2DED6;
+  --red:#E4372B; --red-soft:#FCE6E3; --blue:#4F86A8; --blue-soft:#E3EFF5;
+  --ok:#2B8F68; --bad:#B3261E; --scene:#F6F4EF; --grid:#FFFFFF; --hull:#9DB3BF; --water:#CFE5EC;
+  --shadow:0 1px 2px rgba(23,24,26,.05),0 10px 34px rgba(23,24,26,.07);
+  --f-display:"Inter Tight","Inter",system-ui,sans-serif; --f-body:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif; --f-mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#101214; --surface:#1B1E21; --surface2:#23272B; --ink:#F2F0EB; --muted:#9A9790; --line:#2E3236;
+  --red:#FF5A4D; --red-soft:#3A1E1B; --blue:#7FB3D1; --blue-soft:#1F3140;
+  --ok:#46C896; --bad:#FF7A70; --scene:#15181B; --grid:#2C4552; --hull:#7E97A6; --water:#1D3340; --shadow:0 10px 34px rgba(0,0,0,.35); color-scheme:dark;}}
+:root[data-theme="dark"]{
+  --bg:#101214; --surface:#1B1E21; --surface2:#23272B; --ink:#F2F0EB; --muted:#9A9790; --line:#2E3236;
+  --red:#FF5A4D; --red-soft:#3A1E1B; --blue:#7FB3D1; --blue-soft:#1F3140;
+  --ok:#46C896; --bad:#FF7A70; --scene:#15181B; --grid:#2C4552; --hull:#7E97A6; --water:#1D3340; --shadow:0 10px 34px rgba(0,0,0,.35); color-scheme:dark;}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:15px/1.55 var(--f-body);padding-block:14px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:1360px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+.topbar{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;justify-content:space-between}
+.brand{font:600 13px var(--f-mono);letter-spacing:.04em;color:var(--muted)}
+.brand b{color:var(--red);font-weight:600}
+.ctrls{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.seg{display:inline-flex;border-radius:999px;overflow:hidden;background:var(--surface);box-shadow:inset 0 0 0 1px var(--line)}
+.seg button{border:0;background:transparent;color:var(--muted);font:500 12.5px var(--f-body);padding:7px 13px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.tog{display:inline-flex;gap:8px;align-items:center;font-size:13px;color:var(--muted);cursor:pointer;user-select:none}
+.tog input{accent-color:var(--red);width:16px;height:16px}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) 364px;gap:14px;align-items:start}
+@media(max-width:940px){.grid{grid-template-columns:minmax(0,1fr)}}
+.vp{position:relative;height:clamp(480px,80vh,840px);border-radius:26px;overflow:hidden;background:var(--scene);box-shadow:var(--shadow);touch-action:none}
+#gl{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:grab}
+#gl:active{cursor:grabbing}
+.hero{position:absolute;left:0;top:0;bottom:0;width:min(50%,560px);padding:34px 0 80px 34px;display:flex;flex-direction:column;justify-content:center;gap:16px;background:linear-gradient(90deg,var(--scene) 55%,transparent);z-index:4;transition:opacity .5s;pointer-events:none}
+.hero.off{opacity:0;visibility:hidden}
+.hero h1{font:700 clamp(2rem,4.4vw,3.6rem)/0.98 var(--f-display);letter-spacing:-.035em;margin:0;text-wrap:balance}
+.hero p{margin:0;max-width:34ch;color:var(--muted);font-size:15px}
+.hero .bt{display:flex;gap:8px;flex-wrap:wrap;pointer-events:auto}
+@media(max-width:700px){.hero{width:100%;justify-content:flex-start;padding:20px 20px 0;background:linear-gradient(180deg,var(--scene) 55%,transparent);bottom:auto;height:62%}.hero h1{font-size:2rem}}
+.pill,.btn{font:600 13.5px var(--f-body);border:0;border-radius:999px;padding:10px 18px;background:var(--red);color:#fff;cursor:pointer}
+.pill.ghost,.btn.alt{background:var(--surface);color:var(--red);box-shadow:inset 0 0 0 1.5px var(--red)}
+.btn.bad{background:var(--bad);color:#fff}
+.btn:focus-visible,.pill:focus-visible,.st:focus-visible,.seg button:focus-visible,select:focus-visible,.hot:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.tag{position:absolute;left:0;top:0;pointer-events:none;font:600 12px/1 var(--f-body);color:#fff;background:var(--red);border-radius:999px;padding:6px 11px;white-space:nowrap;transform:translate(-50%,-150%);opacity:0;transition:opacity .25s;box-shadow:0 4px 14px rgba(0,0,0,.18)}
+#hot{position:absolute;inset:0;pointer-events:none;z-index:3}
+.hot{position:absolute;left:0;top:0;display:flex;align-items:center;gap:6px;border:0;background:transparent;padding:0;cursor:pointer;transform:translate(-14px,-14px);opacity:0;pointer-events:none;transition:opacity .3s}
+.hot i{font:600 18px/26px var(--f-body);font-style:normal;width:28px;height:28px;border-radius:50%;background:#fff;color:var(--red);text-align:center;box-shadow:0 3px 12px rgba(0,0,0,.2)}
+.hot span{font:600 12px/1 var(--f-body);color:#fff;background:var(--red);border-radius:999px;padding:6px 11px;white-space:nowrap;box-shadow:0 3px 12px rgba(0,0,0,.18)}
+.hot:hover i{background:var(--red);color:#fff}
+.hud-t{position:absolute;left:14px;top:14px;right:14px;display:flex;justify-content:space-between;gap:10px;pointer-events:none;z-index:2}
+.hud-title{background:var(--surface);border-radius:16px;padding:8px 14px;max-width:min(70%,440px);box-shadow:var(--shadow);transition:opacity .4s}
+.hud-title.off{opacity:0;visibility:hidden}
+.hud-title small{display:block;font:500 11px var(--f-mono);color:var(--red);letter-spacing:.05em}
+.hud-title b{font:700 18px var(--f-display);letter-spacing:-.02em}
+.hud-hdg{margin-left:auto;background:var(--surface);border-radius:999px;padding:6px 14px 6px 8px;display:flex;gap:9px;align-items:center;font:600 13px var(--f-mono);box-shadow:var(--shadow);height:fit-content}
+.hud-hdg svg{width:30px;height:30px;display:block;color:var(--ink)}
+.stepper{position:absolute;left:14px;right:14px;bottom:12px;display:flex;gap:6px;overflow-x:auto;padding:2px 0 4px;scrollbar-width:none;z-index:5}
+.stepper::-webkit-scrollbar{display:none}
+.st{flex:0 0 auto;display:flex;align-items:baseline;gap:6px;border:0;background:var(--surface);color:var(--red);border-radius:999px;padding:7px 14px;cursor:pointer;font:inherit;box-shadow:inset 0 0 0 1.5px var(--red)}
+.st small{font:600 10.5px var(--f-mono);opacity:.8}
+.st b{font:600 13px var(--f-body)}
+.st.done{background:var(--red-soft)}
+.st[aria-current="step"]{background:var(--red);color:#fff}
+.alarm{position:absolute;left:14px;right:14px;bottom:62px;background:var(--bad);color:#fff;border-radius:16px;padding:11px 15px;font-size:13.5px;display:none;box-shadow:0 8px 28px rgba(0,0,0,.25);z-index:7}
+.alarm.on{display:block}
+.alarm.info{background:var(--ink);color:var(--bg)}
+.nogl{position:absolute;inset:0;display:none;align-items:center;justify-content:center;padding:24px;text-align:center;color:var(--muted)}
+.drawer{position:absolute;left:14px;top:66px;bottom:62px;width:min(290px,calc(100% - 28px));overflow:auto;background:var(--surface);border-radius:18px;padding:6px 8px 12px;z-index:8;box-shadow:var(--shadow)}
+.drawer h4{font:700 11px var(--f-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:14px 8px 4px}
+.drawer button{display:block;width:100%;text-align:left;border:0;background:transparent;color:var(--ink);font:500 13.5px var(--f-body);padding:7px 10px;border-radius:10px;cursor:pointer}
+.drawer button:hover{background:var(--red-soft)} .drawer button.on{background:var(--red);color:#fff}
+.drawer button:focus-visible{outline:2px solid var(--ink);outline-offset:1px}
+.cinfo{position:absolute;left:14px;bottom:62px;width:min(470px,calc(100% - 28px));max-height:46%;overflow:auto;background:var(--surface);border-radius:18px;padding:12px 44px 14px 16px;z-index:6;box-shadow:var(--shadow)}
+.cinfo small{display:block;font:500 11px var(--f-mono);color:var(--red);letter-spacing:.05em}
+.cinfo b{display:block;font:700 18px var(--f-display);letter-spacing:-.02em;margin:1px 0 3px}
+.cinfo p{margin:3px 0 0;font-size:13.5px}
+.cinfo p.t{font:500 12.5px var(--f-mono);color:var(--blue)}
+.cinfo .x{position:absolute;right:8px;top:6px;border:0;background:transparent;color:var(--muted);font-size:24px;line-height:1;cursor:pointer;padding:4px 9px}
+.panel{display:flex;flex-direction:column;gap:12px;min-width:0}
+.box{background:var(--surface);border-radius:22px;padding:16px 18px;min-width:0;box-shadow:var(--shadow)}
+.box h2{font:600 11.5px var(--f-mono);letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+.cmd{display:flex;gap:8px}
+.cmd input{flex:1;min-width:0;font:500 16px var(--f-mono);padding:11px 15px;border-radius:999px;border:0;background:var(--surface2);color:var(--ink);box-shadow:inset 0 0 0 1px var(--line)}
+.cmd input:focus-visible{outline:2px solid var(--red);outline-offset:1px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.chip{font:500 12px var(--f-mono);border:0;background:var(--surface2);color:var(--ink);border-radius:999px;padding:6px 12px;cursor:pointer;box-shadow:inset 0 0 0 1px var(--line)}
+.chip:hover{box-shadow:inset 0 0 0 1.5px var(--red)}
+.msg{margin:10px 0 0;font-size:13px;min-height:1.3em;color:var(--muted)}
+.msg.err{color:var(--bad)} .msg.ok{color:var(--ok)}
+.row{display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap}
+select{font:500 13px var(--f-body);padding:8px 12px;border-radius:999px;border:0;background:var(--surface2);color:var(--ink);box-shadow:inset 0 0 0 1px var(--line);max-width:100%}
+.fsm{display:flex;gap:5px;flex-wrap:wrap}
+.fs{flex:1 1 60px;border-radius:14px;padding:6px 6px;font:600 12px var(--f-mono);text-align:center;color:var(--muted);background:var(--surface2)}
+.fs small{display:block;font:400 10px var(--f-body);margin-top:1px}
+.fs.on{background:var(--red);color:#fff}
+.fs.on.f4{background:#7B1710}
+.guard{font:12.5px/1.45 var(--f-mono);color:var(--muted);margin:10px 0 0}
+.ro{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:12px}
+.ro div{background:var(--surface2);border-radius:14px;padding:8px 10px}
+.ro span{display:block;font:500 10px var(--f-mono);color:var(--muted);letter-spacing:.05em}
+.ro b{font:600 16px var(--f-mono);font-variant-numeric:tabular-nums}
+.ro b.hot{color:var(--red)}
+.explain h3{font:700 19px var(--f-display);letter-spacing:-.02em;margin:0 0 4px}
+.explain p{margin:6px 0 0;font-size:14px}
+.explain .k{font:500 12px var(--f-mono);color:var(--red);margin:0}
+.explain .live{background:var(--red-soft);border-radius:14px;padding:8px 12px;margin-top:10px;font:500 12.5px var(--f-mono)}
+.nav2{display:flex;gap:8px;margin-top:12px}
+.log{font:12px/1.55 var(--f-mono);color:var(--muted);max-height:132px;overflow:auto;margin:0;padding:0;list-style:none}
+.log li b{color:var(--ink);font-weight:600}
+details.src{font-size:13px;color:var(--muted)}
+details.src summary{cursor:pointer;font:600 11.5px var(--f-mono);letter-spacing:.07em;text-transform:uppercase}
+details.src ul{padding-left:18px;margin:8px 0 0}
+details.src a{color:var(--red)}
+[hidden]{display:none!important}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+@media (prefers-reduced-motion:reduce){.tag,.hot,.hero,.hud-title{transition:none}}
+</style>
+
+<div class="wrap">
+  <div class="topbar">
+    <div class="brand"><b>●</b> Simulasi steering gear · kapal RoRo</div>
+    <div class="ctrls">
+      <button class="btn alt" id="bComp" type="button" aria-expanded="false" aria-controls="drawer">Komponen</button>
+      <div class="seg" role="group" aria-label="Tampilan lambung"><button type="button" data-shell="auto" aria-pressed="true">Otomatis</button><button type="button" data-shell="solid" aria-pressed="false">Solid</button><button type="button" data-shell="ghost" aria-pressed="false">Tembus</button></div>
+      <label class="tog"><input type="checkbox" id="tour" checked> Tur otomatis</label>
+      <div class="seg" role="group" aria-label="Kecepatan simulasi">
+        <button type="button" data-spd="1" aria-pressed="true">×1</button>
+        <button type="button" data-spd="2" aria-pressed="false">×2</button>
+        <button type="button" data-spd="4" aria-pressed="false">×4</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <section class="vp" id="vp" aria-label="Tampilan 3D kapal">
+      <canvas id="gl"></canvas>
+      <div id="tags"></div>
+      <div id="hot"></div>
+      <div class="hero" id="hero">
+        <h1>Jalur Perintah Kemudi</h1>
+        <p>Beri perintah rudder di anjungan kapal RoRo, lalu ikuti jalurnya lewat kontrol, listrik, hidrolik, ram, tiller, dan rudder stock sampai kapal berbelok.</p>
+        <div class="bt"><button class="pill" id="bStart" type="button">Kirim perintah contoh</button><button class="pill ghost" id="bOver" type="button">Lihat komponen</button></div>
+      </div>
+      <div class="hud-t">
+        <div class="hud-title off" id="hudT"><small id="hStage">TAHAP 0</small><b id="hName">Gambaran umum</b></div>
+        <div class="hud-hdg"><svg viewBox="-20 -20 40 40" aria-hidden="true"><circle r="17" fill="none" stroke="currentColor" stroke-opacity=".3"/><g id="needle"><path d="M0-15L4 6L0 3L-4 6Z" fill="#E4372B"/></g></svg><span>HDG <span id="hHdg">000°</span></span></div>
+      </div>
+      <div class="drawer" id="drawer" hidden aria-label="Daftar komponen"></div>
+      <div class="cinfo" id="cinfo" hidden><button class="x" id="cx" type="button" aria-label="Tutup keterangan">×</button><small id="cG"></small><b id="cN"></b><p id="cF"></p><p class="t" id="cT"></p></div>
+      <div class="tag" id="ctag"></div>
+      <div class="alarm" id="alarm" role="alert"></div>
+      <nav class="stepper" id="stepper" aria-label="Tahap perintah"></nav>
+      <div class="nogl" id="nogl">Browser ini tidak bisa menampilkan WebGL. Coba Chrome atau Edge versi terbaru.</div>
+    </section>
+
+    <aside class="panel">
+      <div class="box">
+        <h2>Perintah di anjungan</h2>
+        <form class="cmd" id="cmdForm" autocomplete="off">
+          <input id="cmdIn" aria-label="Perintah kemudi" value="starboard 20" spellcheck="false">
+          <button class="btn" type="submit">Kirim</button>
+        </form>
+        <div class="chips" id="chips"></div>
+        <p class="msg" id="cmdMsg">Format: sisi + sudut, misalnya <b>stbd 20</b>, <b>port 15</b>, <b>hard a-starboard</b>, <b>midships</b>.</p>
+        <div class="row">
+          <label for="scn" style="font-size:13px;color:var(--muted)">Skenario</label>
+          <select id="scn">
+            <option value="normal">Normal</option>
+            <option value="pump1">Pompa 1 gagal</option>
+            <option value="bypass">Katup bypass terbuka (kasus Puccini)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="box">
+        <h2>Status FSM</h2>
+        <div class="fsm" id="fsm"></div>
+        <p class="guard" id="guard"></p>
+        <div class="ro">
+          <div><span>δc PERINTAH</span><b id="rCmd">0,0°</b></div>
+          <div><span>δ AKTUAL</span><b id="rRud">0,0°</b></div>
+          <div><span>e = δc − δ</span><b id="rErr">0,0°</b></div>
+          <div><span>LAJU RUDDER</span><b id="rRate">0,00°/s</b></div>
+          <div><span>LAJU PUTAR</span><b id="rRot">0,00°/s</b></div>
+          <div><span>MODE</span><b id="rMode">UTAMA</b></div>
+        </div>
+        <div class="row" id="faultRow" hidden>
+          <button class="btn bad" type="button" id="bAux">Aktifkan steering darurat</button>
+          <button class="btn alt" type="button" id="bReset">Reset</button>
+        </div>
+      </div>
+
+      <div class="box explain" id="explain" aria-live="polite"></div>
+
+      <div class="box">
+        <h2>Catatan kejadian</h2>
+        <ul class="log" id="log"></ul>
+      </div>
+
+      <div class="box">
+        <details class="src">
+          <summary>Sumber dan batas model</summary>
+          <p style="margin:8px 0 0">Proporsi lambung mengikuti kapal RoRo Wagenborg O-class: panjang 158,84 m, lebar 25,6 m, tinggi 16,3 m, sarat 9,0 m, satu baling-baling CPP, bow thruster, dan ramp buritan selebar 12 m (Wagenborg, n.d.). Letak akomodasi di buritan dan rudder tunggal adalah asumsi model karena tidak tercantum pada sumber. Satu satuan model = 1,6 m. Laju rudder utama diasumsikan sama dengan batas minimum SOLAS II-1/29: 35° ke 30° sisi lawan dalam 28 detik (sekitar 2,3°/s). Steering darurat: 15° ke 15° sisi lawan dalam 60 detik (0,5°/s) (Indian Register of Shipping, 2014). Belok kapal memakai model orde satu yang disederhanakan, bukan hidrodinamika penuh. Bentuk komponen adalah skema, bukan gambar kerja.</p>
+          <ul>
+            <li>ATSB. (2025). <i>Loss of steering control and collision with navigation beacon, CMA CGM Puccini, Melbourne, 25 May 2023</i> (MO-2023-002). Australian Transport Safety Bureau. <a href="https://www.atsb.gov.au/sites/default/files/2025-02/MO-2023-002-FINAL.pdf" target="_blank" rel="noopener">Laporan</a></li>
+            <li>Indian Register of Shipping. (2014). <i>Technical Circular No. 022/2014: Early implementation of the amendments to SOLAS regulation II-1/29</i>. <a href="https://www.irclass.org/media/1585/early-implementation-of-the-amendments-to-solas-regulation-ii-i29.pdf" target="_blank" rel="noopener">Dokumen</a></li>
+            <li>Wagenborg. (n.d.). <i>O-class</i>. Wagenborg Shipping. <a href="https://wagenborg.com/fleetlist/o-class" target="_blank" rel="noopener">Halaman</a></li>
+            <li>Wärtsilä. (n.d.). <i>Ro-ro</i>. Wärtsilä Encyclopedia of Marine and Energy Technology. <a href="https://www.wartsila.com/encyclopedia/term/ro-ro" target="_blank" rel="noopener">Halaman</a></li>
+            <li>Wärtsilä. (n.d.). <i>Steering gear</i>. Wärtsilä Encyclopedia of Marine and Energy Technology. <a href="https://www.wartsila.com/encyclopedia/term/steering-gear" target="_blank" rel="noopener">Halaman</a></li>
+          </ul>
+        </details>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script src="./three.min.js"></script>
+<script src="./gsap.min.js"></script>
+<script>
+(function(){
+"use strict";
+var D2R=Math.PI/180;
+function $(s){return document.querySelector(s)}
+function css(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()}
+function fmt(v,d){d=(d===undefined?1:d);if(d===0)return String(Math.round(v));var t=v.toFixed(d);if(/^-0(\.0+)?$/.test(t))t=t.slice(1);return t.replace(".",",")}
+function lerp(a,b,t){return a+(b-a)*t}
+
+/* ---------- data tahap ---------- */
+var STAGES=[
+ {id:0,k:"GAMBARAN UMUM",n:"Gambaran umum",t:"Potongan buritan kapal dengan seluruh komponen. Kirim perintah, lalu kamera mengikuti jalurnya.",live:function(){return "Kapal melaju lurus. Rudder di midships (0°)."}},
+ {id:1,k:"BRIDGE",n:"Bridge",t:"Perwira jaga memberi perintah, misalnya \"starboard twenty\". Helm menghasilkan sudut perintah δc. Rudder angle indicator di anjungan menampilkan sudut aktual δ.",live:function(){return "δc = "+sgn(S.cmd)+"  ·  δ = "+sgn(S.rud)}},
+ {id:2,k:"CONTROL",n:"Control",t:"Steering gear control unit menghitung error e = δc − δ. Bila |e| lebih besar dari toleransi ε, unit menerbitkan perintah gerak. Nilai δ datang dari transmitter di rudder stock (umpan balik).",live:function(){return "e = "+sgn(S.cmd-S.rud)+"  ·  ε = ±0,5°"}},
+ {id:3,k:"LISTRIK",n:"Listrik",t:"Sinyal diteruskan ke panel starter. Starter menutup dan motor pompa mendapat daya dari main switchboard (atau sumber darurat bila blackout).",live:function(){return "Pompa 1: "+pumpTxt(0)+"  ·  Pompa 2: "+pumpTxt(1)}},
+ {id:4,k:"HIDROLIK",n:"Hidrolik",t:"Motor memutar pompa. Katup arah mengalirkan oli bertekanan ke satu ram, sisi lain kembali ke tangki. Ada dua pompa: bila satu gagal, yang lain mengambil alih. Bila katup bypass terbuka, oli lari ke tangki dan tekanan tidak naik.",live:function(){return S.bypass?"Katup bypass TERBUKA: oli kembali ke tangki":"Tekanan oli ke ram "+(S.cmd>=S.rud?"starboard":"port")}},
+ {id:5,k:"AKTUATOR",n:"Aktuator (ram)",t:"Ram mengubah tekanan oli menjadi gaya lurus. Ram yang bertekanan mendorong crosshead, ram lawannya mundur. Laju mengikuti batas minimum SOLAS II-1/29: 35° ke 30° sisi lawan dalam 28 detik.",live:function(){return "Laju rudder = "+fmt(S.rate,2)+"°/s"}},
+ {id:6,k:"MEKANIK",n:"Mekanik",t:"Crosshead menggeser ujung tiller. Tiller mengubah gerak lurus menjadi momen puntir pada rudder stock. Carrier bearing menahan beban stock.",live:function(){return "Putaran stock δ = "+sgn(S.rud)}},
+ {id:7,k:"RUDDER",n:"Rudder",t:"Daun kemudi ikut berputar sebesar δ. Aliran air membentur daun yang miring dan menimbulkan gaya samping di buritan, ke sisi lawan arah belok.",live:function(){return "Gaya samping ∝ δ = "+sgn(S.rud)}},
+ {id:8,k:"KAPAL",n:"Kapal",t:"Gaya samping di buritan memutar lambung (yaw). Kapal berbelok ke sisi perintah dan lintasannya terlihat pada jejak air di belakangnya.",live:function(){return "HDG "+hdgTxt()+"  ·  laju putar "+fmt(S.r,2)+"°/s"}}
+];
+function sgn(v){var a=Math.abs(v);return (a<0.05?"":(v>0?"stbd ":"port "))+fmt(a)+"°"}
+function pumpTxt(i){var p=S.pump[i];return p==="run"?"jalan":p==="fail"?"GAGAL":"siaga"}
+function hdgTxt(){var h=((S.psi%360)+360)%360;return ("000"+Math.round(h)).slice(-3)+"°"}
+
+/* ---------- state simulasi ---------- */
+var FSM_N={S0:"Standby",S1:"Diterima",S2:"Bergerak",S3:"Tahan",S4:"Gangguan"};
+var EPS=0.5, K=0.12, T=10, SPEED_V=4.5;
+var S={fsm:"S0",cmd:0,rud:0,rate:0,psi:0,r:0,x:0,z:0,mode:"main",scn:"normal",
+  pump:["run","standby"],bypass:false,tS1:0,gateAt:0,failAt:0,failDone:false,chgAt:-1,noFlow:0,stage:0,speed:1,tourOn:true,tourT:0,tourStage:0,reason:"",time:0,pumpSpin:[0,0],gate:false,faultNote:""};
+var DWELL=[0,2.4,3.0,2.6,3.4,3.2,3.2,3.2];
+
+/* ---------- DOM: stepper, chips, fsm ---------- */
+var stepper=$("#stepper");
+STAGES.slice(1).forEach(function(s){
+  var b=document.createElement("button");b.className="st";b.type="button";b.dataset.i=s.id;
+  b.innerHTML="<small>"+("0"+s.id).slice(-2)+"</small><b>"+s.n+"</b>";
+  b.addEventListener("click",function(){S.tourOn=false;$("#tour").checked=false;goStage(s.id)});
+  stepper.appendChild(b);
+});
+var CHIPS=["stbd 20","port 10","hard a-starboard","hard a-port","midships","stbd 40"];
+CHIPS.forEach(function(c){var b=document.createElement("button");b.type="button";b.className="chip";b.textContent=c;b.addEventListener("click",function(){$("#cmdIn").value=c;submitCmd()});$("#chips").appendChild(b)});
+var fsmEl=$("#fsm");
+["S0","S1","S2","S3","S4"].forEach(function(k){var d=document.createElement("div");d.className="fs"+(k==="S4"?" f4":"");d.id="fs"+k;d.innerHTML=k+"<small>"+FSM_N[k]+"</small>";fsmEl.appendChild(d)});
+
+/* ---------- log ---------- */
+function clock(){var t=Math.floor(S.time);return ("0"+Math.floor(t/60)).slice(-2)+":"+("0"+(t%60)).slice(-2)}
+function log(txt){var li=document.createElement("li");li.innerHTML=clock()+" &nbsp;"+txt;var l=$("#log");l.insertBefore(li,l.firstChild);while(l.children.length>40)l.removeChild(l.lastChild)}
+
+/* ---------- parser perintah ---------- */
+function parseCmd(raw){
+  var s=(raw||"").toLowerCase().replace(/[°º]/g," ").replace(/\bdegrees?\b|\bderajat\b/g," ").replace(/[,]/g,".").trim();
+  if(!s)return {err:"Ketik perintah dulu, misalnya stbd 20."};
+  if(/mid\s*ships?|amidships|lurus|tengah/.test(s))return {v:0,label:"Midships (0°)"};
+  var side=null;
+  if(/starboard|stbd|\bsb\b|kanan|\bs\b/.test(s))side=1;
+  if(/\bport\b|\bpt\b|kiri|\bp\b/.test(s)){ if(side===1)return {err:"Sisi ganda terdeteksi. Pilih port atau starboard."}; side=-1;}
+  var m=s.match(/(\d+(\.\d+)?)/), deg=null;
+  if(/hard/.test(s)) deg=S.mode==="aux"?15:35;
+  else if(m) deg=parseFloat(m[1]);
+  else{
+    var words={five:5,ten:10,fifteen:15,twenty:20,"twenty five":25,thirty:30,"thirty five":35};
+    for(var w in words){ if(new RegExp("\\b"+w+"\\b").test(s)){deg=words[w]} }
+  }
+  if(side===null)return {err:"Sebutkan sisinya: port (kiri) atau starboard (kanan)."};
+  if(deg===null)return {err:"Sebutkan sudutnya, misalnya stbd 20."};
+  return {v:side*deg,label:(side>0?"Starboard ":"Port ")+fmt(deg,deg%1?1:0)+"°"};
+}
+
+function submitCmd(){
+  var msg=$("#cmdMsg"), p=parseCmd($("#cmdIn").value);
+  if(p.err){msg.className="msg err";msg.textContent=p.err;return}
+  var lim=S.mode==="aux"?15:35;
+  if(S.fsm==="S4"){msg.className="msg err";msg.textContent="Sistem dalam gangguan (S4). Reset atau aktifkan steering darurat dulu.";log("<b>Ditolak</b>: sistem S4");return}
+  if(Math.abs(p.v)>lim){msg.className="msg err";msg.textContent="Ditolak: "+fmt(Math.abs(p.v),0)+"° melebihi batas mekanis "+lim+"° ("+(S.mode==="aux"?"steering darurat":"limit switch main gear")+").";log("<b>Ditolak</b>: "+p.label+" di luar ±"+lim+"°");return}
+  msg.className="msg ok";msg.textContent="Perintah dipakai: "+p.label+"  →  δc = "+sgn(p.v);
+  issue(p.v,p.label);
+}
+
+function issue(v,label){
+  S.cmd=v;S.fsm="S1";S.tS1=0;S.gate=false;S.failDone=false;S.chgAt=-1;S.noFlow=0;S.reason="";
+  S.scn=$("#scn").value;
+  S.bypass=(S.scn==="bypass"&&S.mode==="main");
+  S.pump=S.mode==="aux"?["standby","standby"]:["run","standby"];
+  hideAlarm();
+  log("<b>S1</b> Perintah diterima: "+label);
+  S.tourOn=$("#tour").checked;
+  if(S.tourOn){S.gateAt=DWELL[1]+DWELL[2]+DWELL[3]+DWELL[4];S.failAt=DWELL[1]+DWELL[2]+DWELL[3]+0.4;S.tourT=0;goStage(1);bridgeTurn(v)}
+  else{S.gateAt=3.8;S.failAt=1.0;bridgeTurn(v)}
+}
+
+/* ---------- three.js ---------- */
+var sun,renderer,scene,camera,ship,ocean,wake,wakeGeo,wakePts=[],stockG,rams={},pumps=[],needle,wheel,gaugeNeedle,arrows={},led={},bypassHandle,pipes={},labels=[],stageMats={},edgeMats=[];
+var pulses=[],glOK=true;
+var cam={px:-225,py:275,pz:249,lx:12,ly:-1,lz:0,mix:0,fov:14,ox:(window.innerWidth>940?-0.09:0)};
+var orbit={yaw:0,pitch:0,zoom:1};
+var CAMS=[
+ {px:-225,py:275,pz:249,lx:12,ly:-1,lz:0,mix:0,fov:14},
+ {px:-20.5,py:12.6,pz:4.8,lx:-12.8,ly:10.2,lz:0,mix:0,fov:40},
+ {px:-14.5,py:4.5,pz:-34,lx:-15,ly:4.2,lz:0,mix:0,fov:40},
+ {px:-12.5,py:4.6,pz:8.5,lx:-17,ly:-2.2,lz:0.6,mix:0,fov:40},
+ {px:-12.5,py:6.8,pz:7,lx:-18.5,ly:-2.4,lz:0,mix:0,fov:40},
+ {px:-13.5,py:4.2,pz:7.8,lx:-20.3,ly:-1.7,lz:0.3,mix:0,fov:40},
+ {px:-17.5,py:3.4,pz:7.2,lx:-23,ly:-2.6,lz:0,mix:0,fov:40},
+ {px:-31.5,py:-4.6,pz:9,lx:-24.3,ly:-6,lz:0,mix:0,fov:40},
+ {px:-165,py:232,pz:-176,lx:14,ly:0,lz:6,mix:1,fov:14}
+];
+
+function setupGL(){
+  var canvas=$("#gl");
+  try{renderer=new THREE.WebGLRenderer({canvas:canvas,antialias:true})}catch(e){glOK=false;$("#nogl").style.display="flex";return}
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+  scene=new THREE.Scene();
+  camera=new THREE.PerspectiveCamera(36,1,0.5,2200);
+  renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+  scene.add(new THREE.HemisphereLight(0xffffff,0xd8d2c8,0.88));
+  sun=new THREE.DirectionalLight(0xffffff,0.82);sun.position.set(-70,130,90);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);
+  var sc=sun.shadow.camera;sc.left=-95;sc.right=95;sc.top=95;sc.bottom=-95;sc.near=10;sc.far=420;sun.shadow.bias=-0.0004;scene.add(sun);scene.add(sun.target);
+  ship=new THREE.Group();scene.add(ship);
+  buildShip();buildOcean();
+  hullSolid.castShadow=true;cargoW.castShadow=true;accGroup.traverse(function(o){if(o.isMesh)o.castShadow=true});
+  applyTheme();
+  resize();
+}
+
+function M(color,stage,op,extra){
+  var m=new THREE.MeshStandardMaterial({color:color,metalness:0,roughness:0.9,transparent:true,opacity:op===undefined?1:op,emissive:new THREE.Color(color),emissiveIntensity:0});
+  m.userData.base=m.opacity;m.userData.stage=stage;
+  if(extra)for(var k in extra)m[k]=extra[k];
+  (stageMats[stage]=stageMats[stage]||[]).push(m);return m;
+}
+function add(parent,geo,mat,x,y,z){var m=new THREE.Mesh(geo,mat);m.position.set(x||0,y||0,z||0);parent.add(m);return m}
+function box(w,h,d){return new THREE.BoxGeometry(w,h,d)}
+function cylX(r,l,seg){var g=new THREE.CylinderGeometry(r,r,l,seg||20);g.rotateZ(Math.PI/2);return g}
+function cylZ(r,l,seg){var g=new THREE.CylinderGeometry(r,r,l,seg||20);g.rotateX(Math.PI/2);return g}
+function edges(mesh,color,parent){var l=new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry,25),new THREE.LineBasicMaterial({color:color,transparent:true,opacity:0.55}));l.position.copy(mesh.position);l.rotation.copy(mesh.rotation);(parent||mesh.parent).add(l);edgeMats.push(l.material);return l}
+function pipe(name,pts,stage){
+  var c=new THREE.CatmullRomCurve3(pts.map(function(p){return new THREE.Vector3(p[0],p[1],p[2])}));
+  var mat=M(0x8a98a8,stage,0.9);
+  var mesh=new THREE.Mesh(new THREE.TubeGeometry(c,28,0.1,8,false),mat);ship.add(mesh);
+  var parts=[],pm=new THREE.MeshBasicMaterial({color:0xff5a4d}),n=9;
+  for(var i=0;i<n;i++){var s=new THREE.Mesh(new THREE.SphereGeometry(0.17,10,8),pm);s.visible=false;ship.add(s);parts.push({m:s,t:i/n})}
+  pipes[name]={curve:c,parts:parts,mat:pm,dir:0,mesh:mesh};
+  return c;
+}
+function curveOf(pts){return new THREE.CatmullRomCurve3(pts.map(function(p){return new THREE.Vector3(p[0],p[1],p[2])}))}
+
+/* ---------- model kapal RoRo: proporsi mengikuti Wagenborg O-class (1 satuan = 1,6 m) ---------- */
+var WL=-3.2,DECK=1.4,KEEL=-8.8;
+function hb(x){var b=8,t;if(x<-14){t=Math.min(1,(-14-x)/12);b=8-2.5*Math.pow(t,1.5)}if(x>46){t=Math.min(1,(x-46)/27);b=8*Math.pow(Math.max(0,1-Math.pow(t,2.2)),0.8)}return b}
+function yb(x){var y=KEEL;if(x<-10)y=KEEL+0.4*(-10-x);if(x>56)y=KEEL+6.6*Math.pow(Math.min(1,(x-56)/17),1.6);return y}
+var XS=[-26,-25,-23.5,-21.5,-19,-16,-13,-10,-5,0,6,12,18,24,30,36,42,46,50,54,58,62,65,68,70.5,72.3,73];
+function halfPts(x){var b=hb(x),yk=yb(x),ywc=Math.max(WL,yk+0.05),y2=Math.max(yk,ywc-0.04);
+  return [[b,DECK,0],[b,ywc,0],[b,y2,1],[b*0.98,yk+(y2-yk)*0.45,1],[b*0.9,yk+(y2-yk)*0.12,1],[b*0.66,yk,1],[0,yk,1]]}
+function ringPts(x){var h=halfPts(x),r=[],j;for(j=0;j<7;j++)r.push([x,h[j][1],h[j][0],h[j][2]]);for(j=5;j>=0;j--)r.push([x,h[j][1],-h[j][0],h[j][2]]);return r}
+
+var hullSolid,hullGhost,hullLineMat,deckWMat,deckTMat,accGroup,accMats=[],accLineMat,cargoW,cargoT,propG,radarG,selBox=null,selId=null,selTop=new THREE.Vector3();
+var shell={ghost:0,acc:1,cargo:1},shellMode="auto";
+var compObj={},pickList=[];
+function R(id,obj){(compObj[id]=compObj[id]||[]).push(obj);obj.traverse(function(o){if(o.isMesh){o.userData.comp=id;pickList.push(o)}})}
+function link(a,b,r,mat){var A=new THREE.Vector3(a[0],a[1],a[2]),B=new THREE.Vector3(b[0],b[1],b[2]),d=B.clone().sub(A),len=d.length(),m=new THREE.Mesh(new THREE.CylinderGeometry(r,r,len,12),mat);
+  m.position.copy(A).add(B).multiplyScalar(0.5);m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),d.normalize());ship.add(m);return m}
+function plainMat(color,op){return new THREE.MeshStandardMaterial({color:color,roughness:0.9,metalness:0,transparent:op!==undefined&&op<1,opacity:op===undefined?1:op})}
+function A(geo,color,x,y,z,parent){var m=new THREE.Mesh(geo,new THREE.MeshStandardMaterial({color:color,roughness:0.9,metalness:0,transparent:true,opacity:1}));m.position.set(x,y,z);(parent||accGroup).add(m);accMats.push(m.material);return m}
+
+function buildHull(){
+  var NAVY=new THREE.Color(0xe4372b),RED=new THREE.Color(0x8f2019),pos=[],col=[],idx=[],N=13,i,k;
+  XS.forEach(function(x){ringPts(x).forEach(function(r){pos.push(r[0],r[1],r[2]);var c=r[3]?RED:NAVY;col.push(c.r,c.g,c.b)})});
+  for(i=0;i<XS.length-1;i++)for(k=0;k<N-1;k++){var a=i*N+k,b=a+1,c=(i+1)*N+k+1,d=(i+1)*N+k;idx.push(a,b,c,a,c,d)}
+  var t0=pos.length/3,r0=ringPts(XS[0]);
+  r0.forEach(function(r){pos.push(r[0],r[1],r[2]);col.push(NAVY.r,NAVY.g,NAVY.b)});
+  pos.push(XS[0],(DECK+yb(XS[0]))/2,0);col.push(NAVY.r,NAVY.g,NAVY.b);
+  for(k=0;k<N;k++)idx.push(t0+N,t0+k,t0+(k+1)%N);
+  var g=new THREE.BufferGeometry();g.setAttribute("position",new THREE.Float32BufferAttribute(pos,3));g.setAttribute("color",new THREE.Float32BufferAttribute(col,3));g.setIndex(idx);g.computeVertexNormals();
+  hullSolid=new THREE.Mesh(g,new THREE.MeshStandardMaterial({vertexColors:true,side:THREE.DoubleSide,roughness:0.9,metalness:0}));
+  hullGhost=new THREE.Mesh(g,new THREE.MeshStandardMaterial({color:0x5e86b3,transparent:true,opacity:0.13,depthWrite:false,side:THREE.DoubleSide,roughness:0.8}));
+  ship.add(hullSolid);ship.add(hullGhost);R("hull",hullSolid);
+  hullLineMat=new THREE.LineBasicMaterial({color:0x5e86b3,transparent:true,opacity:0.2});edgeMats.push(hullLineMat);
+  function ln(pts){ship.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),hullLineMat))}
+  [0,1,5].forEach(function(j){[1,-1].forEach(function(sg){ln(XS.map(function(x){var h=halfPts(x)[j];return new THREE.Vector3(x,h[1],sg*h[0])}))})});
+  XS.forEach(function(x,q){if(q%3===0&&q<XS.length-2){var pts=ringPts(x).map(function(r){return new THREE.Vector3(r[0],r[1],r[2])});pts.push(pts[0]);ln(pts)}});
+  /* dek cuaca */
+  function deckMesh(y,x0,x1,inset,mat){var sh=new THREE.Shape(),n=26,pts=[],xx;for(i=0;i<=n;i++){xx=x0+(x1-x0)*i/n;pts.push([xx,Math.max(0.2,hb(xx)-inset)])}
+    sh.moveTo(pts[0][0],pts[0][1]);for(i=1;i<=n;i++)sh.lineTo(pts[i][0],pts[i][1]);for(i=n;i>=0;i--)sh.lineTo(pts[i][0],-pts[i][1]);
+    var gg=new THREE.ShapeGeometry(sh);gg.rotateX(-Math.PI/2);gg.translate(0,y,0);var m=new THREE.Mesh(gg,mat);ship.add(m);return m}
+  deckWMat=new THREE.MeshStandardMaterial({color:0x8c98a6,roughness:0.9,side:THREE.DoubleSide,transparent:false,opacity:1,depthWrite:true});
+  var dw=deckMesh(DECK+0.01,-26,73,0.05,deckWMat);R("deckW",dw);
+  deckTMat=new THREE.MeshStandardMaterial({color:0x8c98a6,roughness:0.9,side:THREE.DoubleSide,transparent:true,opacity:0,depthWrite:false});
+  var dt=deckMesh(-3.0,6,64,0.2,deckTMat);R("deckT",dt);
+  /* bulbous bow */
+  var bulb=new THREE.Mesh(new THREE.SphereGeometry(1,20,14),plainMat(0x8f2019));bulb.scale.set(3.2,1.45,1.45);bulb.position.set(70.2,-5.8,0);ship.add(bulb);R("bulb",bulb);
+}
+
+function buildCargo(){
+  var lanes=[-6.3,-4.5,-2.7,-0.9,0.9,2.7,4.5,6.3],pal=[0xffffff,0xece9e2,0xcfcbc2,0xe4372b,0xf5cbc6,0x8a867e];
+  function mk(y,x0,n){var items=[],i;for(i=0;i<n;i++){var x=x0+i*9.4;lanes.forEach(function(z){if(Math.abs(z)+0.9>hb(x+4.1)-0.6)return;items.push([x,y,z])})}
+    var m=new THREE.InstancedMesh(new THREE.BoxGeometry(8.2,2.3,1.5),new THREE.MeshStandardMaterial({color:0xffffff,transparent:true,opacity:0.92,roughness:0.6}),items.length),mx=new THREE.Matrix4(),c=new THREE.Color();
+    items.forEach(function(it,k){mx.setPosition(it[0],it[1],it[2]);m.setMatrixAt(k,mx);c.set(pal[(k*7+Math.floor(k/3))%pal.length]);m.setColorAt(k,c)});
+    m.instanceMatrix.needsUpdate=true;m.instanceColor.needsUpdate=true;ship.add(m);return m}
+  cargoW=mk(DECK+1.16,8,6);cargoT=mk(-3.0+1.16,10,6);R("cargo",cargoW);R("cargo",cargoT);
+}
+
+function buildSuper(){
+  accGroup=new THREE.Group();ship.add(accGroup);
+  accLineMat=new THREE.LineBasicMaterial({color:0x8a867e,transparent:true,opacity:0.35});
+  var tiers=[[-23,-11,6.5,1.4,3.3],[-22.5,-11.5,6.2,3.3,5.2],[-22,-12,5.8,5.2,7.1],[-21.5,-12.5,5.4,7.1,9.0]],i;
+  tiers.forEach(function(t){var m=A(new THREE.BoxGeometry(t[1]-t[0],t[4]-t[3],t[2]*2),0xf7f5f1,(t[0]+t[1])/2,(t[3]+t[4])/2,0);R("acc",m);
+    var w=A(new THREE.BoxGeometry(0.06,0.55,t[2]*2-1.6),0x3a3f47,t[1]+0.02,(t[3]+t[4])/2+0.1,0);R("acc",w);
+    var e=new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry),accLineMat);e.position.copy(m.position);accGroup.add(e)});
+  var wh=A(new THREE.BoxGeometry(6,1.8,16),0xf7f5f1,-15,9.9,0);R("wheelhouse",wh);
+  var wg=A(new THREE.BoxGeometry(0.06,0.9,15),0x3a3f47,-11.98,10.0,0);R("wheelhouse",wg);
+  var we=new THREE.LineSegments(new THREE.EdgesGeometry(wh.geometry),accLineMat);we.position.copy(wh.position);accGroup.add(we);
+  /* cerobong */
+  var fn=A(new THREE.CylinderGeometry(1.5,1.7,5.5,24),0xe4372b,-19.8,11.75,0);fn.scale.z=1.35;R("funnel",fn);
+  var fb=A(new THREE.CylinderGeometry(1.56,1.6,0.8,24),0xffffff,-19.8,12.7,0);fb.scale.z=1.35;R("funnel",fb);
+  var ft=A(new THREE.CylinderGeometry(1.5,1.5,0.6,24),0x15181d,-19.8,14.3,0);ft.scale.z=1.35;R("funnel",ft);
+  /* tiang + radar */
+  var ms=A(new THREE.CylinderGeometry(0.12,0.12,4.7,8),0x8a98a8,-14.5,13.15,0);R("mast",ms);
+  radarG=new THREE.Group();radarG.position.set(-14.5,14.7,0);accGroup.add(radarG);
+  var rb=A(new THREE.BoxGeometry(2.6,0.1,0.28),0x33404f,0,0,0,radarG);R("mast",rb);
+  var rb2=A(new THREE.BoxGeometry(1.6,0.08,0.22),0x33404f,-14.5,13.4,0);R("mast",rb2);
+  var an=A(new THREE.CylinderGeometry(0.05,0.05,1.4,6),0x8a98a8,-14.5,16.2,0);R("mast",an);
+  /* sekoci */
+  [-1,1].forEach(function(s){var lb=A(new THREE.SphereGeometry(1,16,12),0xe4372b,-17,6.4,s*7.1);lb.scale.set(1.9,0.62,0.62);R("lifeboat",lb);
+    var dv=A(new THREE.BoxGeometry(0.2,1.8,0.2),0x8a98a8,-17,7.2,s*6.45);R("lifeboat",dv)});
+  /* ramp buritan + silinder */
+  var rm=new THREE.Mesh(new THREE.BoxGeometry(0.3,3.1,9.6),plainMat(0xe6e2d9));rm.position.set(-26.2,-0.35,0);ship.add(rm);R("sternRamp",rm);
+  var rh=new THREE.Mesh(new THREE.BoxGeometry(0.34,0.16,9.7),plainMat(0xe4372b));rh.position.set(-26.22,1.25,0);ship.add(rh);R("sternRamp",rh);
+  [-1,1].forEach(function(s){R("sternRamp",link([-24.4,1.4,s*3.6],[-26.2,0.3,s*3.6],0.16,plainMat(0xcfd8e3)))});
+  /* winch tambat buritan, windlass haluan */
+  [-1,1].forEach(function(s){var mw=new THREE.Mesh(new THREE.BoxGeometry(1.4,0.8,1.2),plainMat(0xe4372b));mw.position.set(-24.4,DECK+0.45,s*3.6);ship.add(mw);R("mooring",mw);
+    var dr=new THREE.Mesh(new THREE.CylinderGeometry(0.45,0.45,0.9,14),plainMat(0x8a98a8));dr.position.set(-24.4,DECK+1.15,s*3.6);ship.add(dr);R("mooring",dr)});
+  var wl=new THREE.Mesh(new THREE.BoxGeometry(2.4,0.9,4.2),plainMat(0xe4372b));wl.position.set(66,DECK+0.5,0);ship.add(wl);R("windlass",wl);
+  [-1,1].forEach(function(s){var d2=new THREE.Mesh(new THREE.CylinderGeometry(0.6,0.6,0.9,14),plainMat(0x8a98a8));d2.rotation.x=Math.PI/2;d2.position.set(66,DECK+1.15,s*1.2);ship.add(d2);R("windlass",d2);
+    var hp=link([67.5,DECK-0.1,s*2.4],[69.2,-1.4,s*2.6],0.28,plainMat(0x33404f));R("windlass",hp)});
+  /* thruster haluan */
+  var th=new THREE.Mesh(new THREE.CylinderGeometry(0.85,0.85,8.6,18),new THREE.MeshStandardMaterial({color:0x8a98a8,roughness:0.5,metalness:0.4,transparent:true,opacity:0.95}));th.rotation.x=Math.PI/2;th.position.set(61,-6.4,0);ship.add(th);R("thruster",th);
+  var tp=new THREE.Mesh(new THREE.BoxGeometry(0.2,1.2,0.2),plainMat(0xe4372b));tp.position.set(61,-6.4,0);ship.add(tp);R("thruster",tp);
+}
+
+function buildEngineRoom(){
+  var m=M(0x7b8a9b,100,0.95),i;
+  [-1,1].forEach(function(s){var e=add(ship,box(5.2,1.7,1.8),m,-3,-6.6,s*2.4);R("engine",e);
+    for(i=0;i<6;i++){var hd=add(ship,box(0.5,0.6,1.0),M(0xe4372b,100,0.95),-5+i*0.9,-5.4,s*2.4);R("engine",hd)}});
+  var gb=add(ship,box(2.2,1.9,2.6),M(0x6d9ab8,100,0.95),-9,-6.4,0);R("gearbox",gb);
+  var sh=add(ship,cylX(0.3,10.6,16),M(0xcfd8e3,100,1),-15.3,-6.4,0);R("shaft",sh);
+  var bo=add(ship,cylX(0.75,5.6,18),M(0x7b8a9b,100,0.9),-17.8,-6.4,0);R("shaft",bo);
+  propG=new THREE.Group();propG.position.set(-20.7,-6.4,0);ship.add(propG);
+  var hub=new THREE.Mesh(cylX(0.38,1.0,14),M(0xe4372b,100,1));propG.add(hub);
+  for(i=0;i<4;i++){var bl=new THREE.Mesh(new THREE.BoxGeometry(0.14,1.7,0.6),M(0xe4372b,100,1));var arm=new THREE.Group();arm.rotation.x=i*Math.PI/2;bl.position.y=1.15;bl.rotation.y=0.55;arm.add(bl);propG.add(arm)}
+  R("prop",propG);
+}
+
+function buildShip(){
+  var i;
+  buildHull();buildSuper();buildCargo();buildEngineRoom();
+  /* BRIDGE (stage 1) */
+  var cons=add(ship,box(0.9,0.9,3.6),M(0x6d9ab8,1,0.95),-12.7,9.45,0);
+  wheel=new THREE.Group();wheel.position.set(-12.7,10.1,-0.9);ship.add(wheel);
+  var ring=new THREE.Mesh(new THREE.TorusGeometry(0.42,0.06,8,28),M(0xe4372b,1));ring.rotation.y=Math.PI/2;wheel.add(ring);
+  for(i=0;i<4;i++){var sp=new THREE.Mesh(box(0.05,0.84,0.05),M(0xe4372b,1));sp.rotation.x=i*Math.PI/4;wheel.add(sp)}
+  R("helm",wheel);R("helm",cons);
+  var gz=1.0,gy=10.5;
+  var disc=add(ship,cylX(0.62,0.08,32),M(0x2b2e34,1),-12.55,gy,gz);R("rai",disc);
+  for(i=-7;i<=7;i++){var tk=new THREE.Mesh(box(0.03,i%7===0||i===0?0.14:0.08,0.03),M(i===0?0xe4372b:0xdce8f6,1));var a=i*10*D2R;tk.position.set(-12.62,gy+0.5*Math.cos(a),gz+0.5*Math.sin(a));tk.rotation.x=a;ship.add(tk);R("rai",tk)}
+  gaugeNeedle=new THREE.Group();gaugeNeedle.position.set(-12.64,gy,gz);ship.add(gaugeNeedle);
+  var nd=new THREE.Mesh(box(0.03,0.46,0.03),M(0xff5a4d,1));nd.position.y=0.23;gaugeNeedle.add(nd);R("rai",gaugeNeedle);
+  /* CONTROL (stage 2) */
+  var cab=add(ship,box(1.0,1.7,1.5),M(0x6d9ab8,2,0.95),-15.7,-1.15,-2.3);edges(cab,0x2b2e34);R("ctl",cab);
+  led.ctl=add(ship,new THREE.SphereGeometry(0.1,12,10),new THREE.MeshBasicMaterial({color:0x3ccb8a}),-15.15,-0.6,-2.3);R("ctl",led.ctl);
+  var xmit=add(ship,box(0.5,0.4,0.5),M(0x1b8a57,2,0.95),-23,-0.3,1.0);R("xmit",xmit);
+  /* LISTRIK (stage 3) */
+  var pan=add(ship,box(1.0,1.7,2.0),M(0xf0b94e,3,0.95),-15.7,-1.15,2.5);edges(pan,0x2b2e34);R("starter",pan);
+  led.st1=add(ship,new THREE.SphereGeometry(0.1,12,10),new THREE.MeshBasicMaterial({color:0x6b7a8c}),-15.15,-0.7,1.9);
+  led.st2=add(ship,new THREE.SphereGeometry(0.1,12,10),new THREE.MeshBasicMaterial({color:0x6b7a8c}),-15.15,-0.7,3.1);R("starter",led.st1);R("starter",led.st2);
+  /* HIDROLIK (stage 4) */
+  [-1,1].forEach(function(s){
+    var g=new THREE.Group();g.position.set(-17.4,-2.8,s*3.2);ship.add(g);
+    var mo=new THREE.Mesh(cylX(0.55,1.5,24),M(0x7b8a9b,3,0.95));mo.position.x=0.6;g.add(mo);
+    var hd=new THREE.Mesh(cylX(0.42,0.8,20),M(0xe4372b,4,0.95));hd.position.x=-0.6;g.add(hd);
+    var rot=new THREE.Group();rot.position.x=-1.05;g.add(rot);
+    for(var k=0;k<3;k++){var bl=new THREE.Mesh(box(0.06,0.7,0.12),M(0xffffff,4,0.95));bl.rotation.x=k*Math.PI/3;rot.add(bl)}
+    var lamp=new THREE.Mesh(new THREE.SphereGeometry(0.12,12,10),new THREE.MeshBasicMaterial({color:0x6b7a8c}));lamp.position.set(0.6,0.7,0);g.add(lamp);
+    pumps.push({g:g,rot:rot,lamp:lamp,mo:mo,s:s});R(s<0?"pump1":"pump2",g);
+  });
+  var tank=add(ship,box(1.6,1.0,2.6),M(0x8fc1d9,4,0.8),-18.4,-0.9,0);R("tank",tank);
+  var vb=add(ship,box(0.9,0.8,1.6),M(0xe4372b,4,0.95),-19.4,-2.7,0);edges(vb,0x2b2e34);R("valve",vb);
+  bypassHandle=new THREE.Group();bypassHandle.position.set(-19.4,-2.2,-0.45);ship.add(bypassHandle);
+  var bs=new THREE.Mesh(new THREE.CylinderGeometry(0.1,0.1,0.4,10),M(0x8a98a8,4));bs.position.y=0.1;bypassHandle.add(bs);
+  var bh=new THREE.Mesh(box(0.7,0.08,0.12),new THREE.MeshBasicMaterial({color:0x1b8a57}));bh.position.y=0.32;bypassHandle.add(bh);bypassHandle.userData.mesh=bh;R("valve",bypassHandle);
+  pipe("A",[[-17.4,-2.5,-3.2],[-18.3,-3.4,-2.2],[-19.1,-3.0,-0.9],[-19.4,-2.8,-0.5]],4);
+  pipe("B",[[-17.4,-2.5,3.2],[-18.3,-3.4,2.2],[-19.1,-3.0,0.9],[-19.4,-2.8,0.5]],4);
+  pipe("C",[[-19.4,-2.8,0.5],[-19.8,-3.5,2.6],[-20.2,-3.1,4.9],[-20.2,-2.0,4.9]],4);
+  pipe("D",[[-19.4,-2.8,-0.5],[-19.8,-3.5,-2.6],[-20.2,-3.1,-4.9],[-20.2,-2.0,-4.9]],4);
+  pipe("E",[[-19.4,-2.3,0.1],[-19.1,-1.8,0.5],[-18.7,-1.3,0.4],[-18.4,-1.35,0.0]],4);
+  Object.keys(pipes).forEach(function(k){R("pipes",pipes[k].mesh)});
+  /* AKTUATOR (stage 5) */
+  [-1,1].forEach(function(s){
+    var body=add(ship,cylZ(0.58,2.6,24),M(0x6d9ab8,5,0.9),-20.2,-1.7,s*3.3);edges(body,0x2b2e34);
+    var rod=new THREE.Mesh(cylZ(0.22,1,16),M(0xcfd8e3,5,1));rod.position.set(-20.2,-1.7,s*1.5);ship.add(rod);
+    rams[s>0?"stbd":"port"]={body:body,rod:rod,s:s};R("ram",body);R("ram",rod);
+  });
+  var xh=add(ship,box(1.1,0.55,0.7),M(0xf0b94e,5,0.95),-20.2,-1.7,0);rams.xh=xh;R("xhead",xh);
+  /* MEKANIK (stage 6) + RUDDER (stage 7) */
+  var bear=add(ship,new THREE.CylinderGeometry(0.62,0.62,0.5,24),M(0x8a98a8,6,0.95),-23,-0.55,0);R("bearing",bear);
+  stockG=new THREE.Group();stockG.position.set(-23,0,0);ship.add(stockG);
+  var sk=add(stockG,new THREE.CylinderGeometry(0.28,0.28,8.2,20),M(0xcfd8e3,6,1),0,-4.5,0);R("stock",sk);
+  var hubm=add(stockG,new THREE.CylinderGeometry(0.62,0.62,0.5,24),M(0xe4372b,6,0.95),0,-1.7,0);R("tiller",hubm);
+  var til=add(stockG,box(2.8,0.34,0.5),M(0xe4372b,6,0.95),1.3,-1.7,0);R("tiller",til);
+  var bl=add(stockG,box(3.2,4.5,0.3),M(0xe4372b,7,0.95),-0.8,-6.15,0);R("blade",bl);
+  var le=add(stockG,new THREE.CylinderGeometry(0.17,0.17,4.5,14),M(0xcfd8e3,7,1),0.8,-6.15,0);R("blade",le);
+  arrows.ram=new THREE.ArrowHelper(new THREE.Vector3(0,0,-1),new THREE.Vector3(),1.5,0xff5a4d,0.5,0.35);ship.add(arrows.ram);
+  arrows.rud=new THREE.ArrowHelper(new THREE.Vector3(0,0,-1),new THREE.Vector3(-24.2,-6.2,0),2,0xff5a4d,0.7,0.5);ship.add(arrows.rud);
+  /* kabel */
+  var sig=curveOf([[-12.9,9.2,0.4],[-14.6,7,1.2],[-15.2,3,1.6],[-15.5,-0.8,-0.6],[-15.7,-1.2,-2.2]]);R("cableSig",tube(sig,0x2aa7e0,2));
+  var p2=curveOf([[-15.7,-0.9,2.5],[-16.8,-3.9,3.2],[-17.4,-2.8,3.2]]);R("cablePwr",tube(p2,0xf0b94e,3));
+  var p1=curveOf([[-15.7,-0.9,2.5],[-16.4,-4.1,0],[-17.0,-3.7,-1.8],[-17.4,-2.8,-3.2]]);R("cablePwr",tube(p1,0xf0b94e,3));
+  var fb=curveOf([[-22.8,-0.3,1.0],[-20,0.2,0.2],[-17.5,0.2,-1.6],[-15.7,-0.4,-2.3]]);R("cableSig",tube(fb,0x2aa7e0,2));
+  var fb2=curveOf([[-15.7,-0.4,-2.3],[-15.2,3,1.6],[-14.6,7,1.2],[-12.6,10.3,0.9]]);
+  pulses.curves={sig:sig,p1:p1,p2:p2,fb:fb,fb2:fb2};
+  pulses.list=[];
+  for(i=0;i<3;i++){var pm=new THREE.Mesh(new THREE.SphereGeometry(0.28,14,12),new THREE.MeshBasicMaterial({color:0x2aa7e0}));pm.visible=false;ship.add(pm);pulses.list.push(pm)}
+  /* label tahap */
+  addLabel(1,"Helm (δc)",-12.7,10.9,-0.9);addLabel(1,"Rudder angle indicator",-12.55,11.4,1.0);
+  addLabel(2,"Control unit: e = δc − δ",-15.7,-0.1,-2.3);addLabel(2,"Kabel sinyal",-15.1,4,1.6);addLabel(2,"Transmitter δ (umpan balik)",-23,0.3,1.0);
+  addLabel(3,"Panel starter motor",-15.7,0,2.5);addLabel(3,"Motor pompa 1",-16.8,-1.9,-3.2);addLabel(3,"Motor pompa 2",-16.8,-1.9,3.2);addLabel(3,"Kabel daya",-16.6,-3.3,-0.8);
+  addLabel(4,"Pompa 1",-18.0,-2.0,-3.2);addLabel(4,"Pompa 2",-18.0,-2.0,3.2);addLabel(4,"Katup arah + bypass",-19.4,-1.9,-0.4);addLabel(4,"Tangki oli",-18.4,-0.2,0);
+  addLabel(5,"Ram port",-20.2,-0.9,-3.3);addLabel(5,"Ram starboard",-20.2,-0.9,3.3);addLabel(5,"Crosshead",-20.2,-1.1,0);
+  addLabel(6,"Tiller",-21.8,-1.2,0);addLabel(6,"Rudder stock",-23,-3.5,0);addLabel(6,"Carrier bearing",-23,-0.1,0);
+  addLabel(7,"Daun kemudi (rudder blade)",-24.0,-8.7,0);addLabel(7,"Gaya samping",-24.2,-5.0,-1.4);
+  addLabel(8,"Kapal",20,4,0);
+  buildCargoLast();
+}
+function buildCargoLast(){}
+
+function tube(c,color,stage){var m=new THREE.Mesh(new THREE.TubeGeometry(c,30,0.06,6,false),M(color,stage,0.9));ship.add(m);return m}
+function addLabel(stage,text,x,y,z){var el=document.createElement("div");el.className="tag";el.textContent=text;$("#tags").appendChild(el);labels.push({stage:stage,el:el,p:new THREE.Vector3(x,y,z)})}
+
+function buildOcean(){
+  ocean=new THREE.Group();scene.add(ocean);
+  var w=new THREE.Mesh(new THREE.PlaneGeometry(900,900),new THREE.MeshBasicMaterial({color:0xcfe5ec,transparent:true,opacity:0.66,depthWrite:false}));w.rotation.x=-Math.PI/2;ocean.add(w);ocean.userData.water=w;
+  var gh=new THREE.GridHelper(900,90,0x9db3c9,0x9db3c9);gh.material.transparent=true;gh.material.opacity=0.5;ocean.add(gh);ocean.userData.grid=gh;
+  var sp=new THREE.Mesh(new THREE.PlaneGeometry(900,900),new THREE.ShadowMaterial({opacity:0.2}));sp.rotation.x=-Math.PI/2;sp.position.y=0.06;sp.receiveShadow=true;ocean.add(sp);
+  ocean.position.y=WL;
+  wakeGeo=new THREE.BufferGeometry();var arr=new Float32Array(600*3);wakeGeo.setAttribute("position",new THREE.BufferAttribute(arr,3));wakeGeo.setDrawRange(0,0);
+  wake=new THREE.Line(wakeGeo,new THREE.LineBasicMaterial({color:0xe4372b}));wake.frustumCulled=false;scene.add(wake);
+}
+
+function applyTheme(){
+  if(!glOK)return;
+  var bg=css("--scene"),hull=css("--hull"),grid=css("--grid");
+  scene.background=new THREE.Color(bg);
+  hullGhost.material.color.set(hull);
+  edgeMats.forEach(function(m){m.color.set(hull)});
+  ocean.userData.grid.material.color.set(grid);
+  ocean.userData.water.material.color.set(css("--water"));
+  var dark=matchMedia("(prefers-color-scheme: dark)").matches;var dt=document.documentElement.dataset.theme;
+  if(dt)dark=dt==="dark";
+  ocean.userData.grid.material.opacity=dark?0.5:0.4;
+  scene.fog=new THREE.Fog(new THREE.Color(bg),700,1900);
+}
+
+function resize(){
+  if(!glOK)return;var vp=$("#vp"),w=vp.clientWidth,h=vp.clientHeight;
+  renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();
+}
+
+var tweenCam=null;
+/* ---------- katalog komponen ---------- */
+var G1="Anjungan dan kontrol",G2="Kelistrikan dan hidrolik",G3="Aktuator dan kemudi",G4="Propulsi",G5="Struktur dan RoRo",G6="Perlengkapan dek";
+var CAT={
+ helm:{g:G1,n:"Helm (pengendali kemudi)",f:"Alat perwira jaga memberi perintah sudut rudder δc, berupa roda, tuas follow-up, atau autopilot.",t:"Tahap 1: perintah dimulai di sini.",dir:[-0.8,0.45,0.8]},
+ rai:{g:G1,n:"Rudder angle indicator",f:"Menampilkan sudut rudder aktual δ di anjungan, supaya perwira jaga dapat membandingkannya dengan perintah.",t:"Nilainya berasal dari transmitter di rudder stock (umpan balik).",dir:[-0.8,0.2,0.6]},
+ wheelhouse:{g:G1,n:"Anjungan (wheelhouse)",f:"Pusat navigasi dan kendali kapal. Dari sini perintah kemudi dan mesin diberikan, dengan pandangan ke seluruh sekeliling.",ext:1,dir:[0.9,0.5,1],dist:20},
+ ctl:{g:G1,n:"Steering gear control unit",f:"Membandingkan sudut perintah δc dengan sudut aktual δ, lalu menghitung error e. Bila |e| lebih besar dari ε unit menyalakan katup dan pompa; bila tidak, aliran dikunci.",t:"Tahap 2 (S1 sampai S3 pada FSM)."},
+ xmit:{g:G1,n:"Transmitter sudut rudder",f:"Sensor di rudder stock yang mengirim sudut δ aktual ke control unit dan ke indikator di anjungan.",t:"Menutup loop kendali. Tanpa umpan balik, error e tidak bisa dihitung."},
+ cableSig:{g:G1,n:"Kabel sinyal",f:"Membawa perintah dari anjungan ke control unit dan membawa sudut aktual kembali. Dipisah dari kabel daya agar tidak terganggu."},
+ starter:{g:G2,n:"Panel starter motor",f:"Kontaktor yang menyambungkan daya main switchboard ke motor pompa, dengan proteksi arus lebih. Bila motor trip, alarm menyala.",t:"Tahap 3."},
+ cablePwr:{g:G2,n:"Kabel daya",f:"Menyalurkan daya listrik dari panel starter ke motor pompa. Pada model ini ada dua jalur, satu untuk tiap pompa."},
+ pump1:{g:G2,n:"Pompa hidrolik 1 dan motor",f:"Motor listrik memutar pompa yang menaikkan tekanan oli. Pompa lain siaga dan mengambil alih otomatis bila yang ini gagal.",t:"Tahap 3 dan 4. Skenario: pompa 1 gagal."},
+ pump2:{g:G2,n:"Pompa hidrolik 2 dan motor",f:"Pompa cadangan. Menyala saat pompa 1 gagal (changeover), sehingga rudder tetap bisa digerakkan.",t:"Tahap 4."},
+ tank:{g:G2,n:"Tangki oli",f:"Menyimpan oli hidrolik dan menerima oli balik dari ram, sehingga pompa tidak kekurangan oli."},
+ valve:{g:G2,n:"Blok katup arah dan bypass",f:"Mengarahkan oli ke ram yang benar dan mengunci aliran saat posisi tercapai. Katup bypass menghubungkan sisi tekan ke tangki untuk uji; bila lupa ditutup, rudder tidak bergerak (ATSB, 2025).",t:"Tahap 4. Skenario: katup bypass terbuka."},
+ pipes:{g:G2,n:"Pipa hidrolik",f:"Menyalurkan oli bertekanan dari pompa ke katup dan ke ram, serta oli balik ke tangki. Oranye = tekan, biru = balik."},
+ ram:{g:G3,n:"Ram hidrolik (silinder)",f:"Mengubah tekanan oli menjadi gaya lurus. Dua ram berhadapan: yang bertekanan mendorong, lawannya mundur.",t:"Tahap 5."},
+ xhead:{g:G3,n:"Crosshead",f:"Blok luncur di ujung rod ram. Menahan ujung tiller dan membiarkannya bergeser saat tiller berputar.",t:"Tahap 5 ke 6."},
+ tiller:{g:G3,n:"Tiller",f:"Lengan yang terpasang pada rudder stock. Mengubah gaya lurus ram menjadi momen puntir pada stock.",t:"Tahap 6."},
+ stock:{g:G3,n:"Rudder stock",f:"Poros vertikal yang meneruskan momen puntir dari tiller ke daun kemudi, melewati rudder trunk di lambung.",t:"Tahap 6."},
+ bearing:{g:G3,n:"Carrier bearing",f:"Menahan berat rudder dan stock serta gaya vertikal, sambil membiarkan stock berputar."},
+ blade:{g:G3,n:"Daun kemudi (rudder blade)",f:"Bilah di belakang baling-baling. Saat miring sebesar δ, aliran air menimbulkan gaya samping yang memutar kapal.",t:"Tahap 7.",dir:[-0.9,0.1,1],dist:12},
+ engine:{g:G4,n:"Mesin utama",f:"Mesin diesel yang menghasilkan daya penggerak. Kapal acuan memakai dua mesin diesel (Wagenborg, n.d.).",dir:[0.7,0.6,1],dist:14},
+ gearbox:{g:G4,n:"Gearbox reduksi",f:"Menurunkan putaran mesin menjadi putaran baling-baling dan menyatukan dua mesin pada satu poros."},
+ shaft:{g:G4,n:"Poros baling-baling",f:"Meneruskan putaran dari gearbox ke baling-baling lewat bantalan dan stern tube yang menyekat air laut.",dist:22},
+ prop:{g:G4,n:"Baling-baling pitch variabel (CPP)",f:"Mendorong kapal. Sudut daunnya diubah secara hidrolik untuk mengatur laju dan arah tanpa membalik mesin. Kapal acuan memakai satu CPP (Wagenborg, n.d.).",dir:[-0.8,0.1,1],dist:12},
+ thruster:{g:G4,n:"Bow thruster",f:"Baling-baling di terowongan melintang di haluan. Memberi gaya samping saat kapal bermanuver pelan di pelabuhan, ketika rudder kurang efektif (Wärtsilä, n.d.).",dist:20,dir:[0.8,0.4,1]},
+ hull:{g:G5,n:"Lambung (hull)",f:"Badan kapal yang memberi daya apung dan menahan beban. Lambung RoRo tinggi dan lebar dengan dek kendaraan panjang tanpa sekat melintang, sehingga stabilitas dan kedap air menjadi perhatian utama (Wärtsilä, n.d.).",ext:1,dist:105,dir:[-0.5,0.35,0.9],box:[-26,-8.8,-8,73,1.4,8]},
+ deckW:{g:G5,n:"Dek cuaca (weather deck)",f:"Dek paling atas. Menampung muatan beroda atau kontainer dan menutup ruang kendaraan di bawahnya dari air laut.",ext:1,dist:80,dir:[-0.3,0.9,0.5],box:[-26,1.3,-8,73,1.5,8]},
+ deckT:{g:G5,n:"Dek kendaraan bawah (tweendeck)",f:"Dek di dalam lambung untuk truk dan trailer. Kendaraan naik lewat ramp, lalu diikat dengan lashing.",cargo:1,dist:70,dir:[-0.4,0.8,0.6],box:[6,-3.1,-7,64,-2.9,7]},
+ cargo:{g:G5,n:"Muatan beroda (trailer dan truk)",f:"Muatan yang digulirkan masuk dan keluar tanpa crane. Kapasitas diukur dalam lane meter (Wärtsilä, n.d.).",cargo:1,ext:0,dist:75,dir:[-0.3,0.85,0.6],box:[4,-3,-7.2,60,3.8,7.2]},
+ sternRamp:{g:G5,n:"Ramp buritan",f:"Jembatan baja berengsel di buritan. Diturunkan menjadi jalan antara dermaga dan dek, dinaikkan menjadi pintu kedap saat berlayar, digerakkan silinder hidrolik. Pada kapal acuan lebarnya 12 m (Wagenborg, n.d.).",ext:1,dir:[-1,0.35,0.7],dist:18},
+ bulb:{g:G5,n:"Haluan bulbus (bulbous bow)",f:"Tonjolan di bawah air pada haluan yang mengurangi hambatan gelombang pada kecepatan jelajah.",dir:[1,0.2,0.9],dist:16},
+ acc:{g:G5,n:"Akomodasi",f:"Blok tempat tinggal dan kerja awak: kabin, dapur, ruang makan, dan kantor. Pada model ini diletakkan di buritan, dekat ruang mesin dan steering gear. Letak aslinya bisa di buritan, tengah, atau depan (Wärtsilä, n.d.).",ext:1,acc:1,dir:[0.9,0.4,1],dist:34},
+ funnel:{g:G5,n:"Cerobong",f:"Saluran gas buang mesin utama dan generator ke udara bebas, jauh di atas dek.",ext:1,acc:1,dir:[-0.8,0.4,1],dist:14},
+ mast:{g:G5,n:"Tiang radar dan antena",f:"Menopang radar, antena GPS dan VHF, serta lampu navigasi pada titik setinggi mungkin agar jangkauannya jauh.",ext:1,acc:1,dir:[0.9,0.3,1],dist:12},
+ lifeboat:{g:G6,n:"Sekoci (lifeboat)",f:"Alat penyelamat untuk meninggalkan kapal saat darurat. Diturunkan ke air dengan davit.",ext:1,acc:1,dir:[0,0.3,1],dist:12},
+ windlass:{g:G6,n:"Windlass dan pipa jangkar",f:"Windlass menaikkan dan menurunkan rantai jangkar lewat pipa jangkar di haluan. Jangkar menahan kapal di tempat saat berlabuh.",ext:1,dir:[0.9,0.5,1],dist:14},
+ mooring:{g:G6,n:"Winch tambat",f:"Menarik dan menahan tali tambat saat kapal merapat ke dermaga.",ext:1,dir:[-0.9,0.5,1],dist:10}
+};
+var GROUPS=[G1,G2,G3,G4,G5,G6];
+
+/* ---------- kulit kapal: solid, tembus, atau potongan ---------- */
+function shellTarget(){
+  var n=S.stage;
+  if(selId){var c=CAT[selId];return c.ext?{ghost:shellMode==="ghost"?1:0,acc:1,cargo:1}:{ghost:1,acc:c.acc?1:0,cargo:c.cargo?1:0}}
+  if(shellMode==="solid")return {ghost:0,acc:1,cargo:1};
+  if(n===0||n===8)return {ghost:shellMode==="ghost"?1:0,acc:1,cargo:1};
+  if(n<=2)return {ghost:1,acc:1,cargo:0};
+  return {ghost:1,acc:0,cargo:0};
+}
+function refreshShell(dur){var t=shellTarget();gsap.to(shell,{duration:dur===undefined?0.9:dur,ghost:t.ghost,acc:t.acc,cargo:t.cargo,ease:"power2.inOut"})}
+function applyShell(){
+  var g=shell.ghost;
+  hullSolid.material.opacity=1-g;hullSolid.material.transparent=g>0.01;hullSolid.visible=g<0.99;
+  hullGhost.material.opacity=0.13*g;hullGhost.visible=g>0.01;
+  hullLineMat.opacity=0.12+0.6*g;
+  deckWMat.opacity=1-0.88*g;deckWMat.transparent=g>0.01;deckWMat.depthWrite=g<0.3;
+  var ao=(1-0.9*g)*shell.acc;accGroup.visible=ao>0.01;
+  accMats.forEach(function(m){m.opacity=ao;m.depthWrite=ao>0.8});accLineMat.opacity=0.35*ao;
+  var cw=shell.cargo,ct=shell.cargo*g;
+  cargoW.visible=cw>0.02;cargoW.material.opacity=0.92*cw;
+  cargoT.visible=ct>0.02;cargoT.material.opacity=0.92*ct;deckTMat.opacity=0.28*ct;
+}
+
+/* ---------- pilih komponen ---------- */
+function localBox(list){
+  var box=new THREE.Box3(),inv=new THREE.Matrix4(),tmp=new THREE.Box3(),mt=new THREE.Matrix4();
+  ship.updateMatrixWorld(true);inv.copy(ship.matrixWorld).invert();
+  list.forEach(function(o){o.traverse(function(m){if(m.geometry){if(!m.geometry.boundingBox)m.geometry.computeBoundingBox();tmp.copy(m.geometry.boundingBox);mt.multiplyMatrices(inv,m.matrixWorld);tmp.applyMatrix4(mt);box.union(tmp)}})});
+  return box;
+}
+function flyTo(px,py,pz,lx,ly,lz,mix,fov){
+  if(tweenCam)tweenCam.kill();
+  tweenCam=gsap.to(cam,{duration:1.5,ease:"power2.inOut",px:px,py:py,pz:pz,lx:lx,ly:ly,lz:lz,mix:mix||0,fov:fov||36});
+  gsap.to(orbit,{duration:0.8,yaw:0,pitch:0,zoom:1,ease:"power2.out"});
+}
+function clearSel(){
+  if(selBox){ship.remove(selBox);selBox=null}
+  selId=null;$("#cinfo").hidden=true;
+  [].forEach.call(document.querySelectorAll("#drawer button"),function(b){b.classList.remove("on")});
+}
+function selectComp(id){
+  var c=CAT[id];if(!c||!compObj[id]||!glOK)return;
+  S.tourOn=false;$("#tour").checked=false;
+  clearSel();selId=id;labels.forEach(function(l){l.on=false});
+  var bb=c.box?new THREE.Box3(new THREE.Vector3(c.box[0],c.box[1],c.box[2]),new THREE.Vector3(c.box[3],c.box[4],c.box[5])):localBox(compObj[id]);
+  var ctr=bb.getCenter(new THREE.Vector3()),sz=bb.getSize(new THREE.Vector3()),mx=Math.max(sz.x,sz.y,sz.z);
+  selBox=new THREE.Box3Helper(bb,0xff5a4d);selBox.material.depthTest=false;selBox.material.transparent=true;selBox.renderOrder=20;ship.add(selBox);
+  selTop.set(ctr.x,bb.max.y,ctr.z);
+  var d=c.dir||[0.7,0.5,0.85],dl=Math.sqrt(d[0]*d[0]+d[1]*d[1]+d[2]*d[2]),dist=c.dist||Math.max(7,Math.min(95,mx*1.9+4));
+  flyTo(ctr.x+d[0]/dl*dist,ctr.y+d[1]/dl*dist,ctr.z+d[2]/dl*dist,ctr.x,ctr.y,ctr.z,0);
+  [].forEach.call(stepper.children,function(b){b.removeAttribute("aria-current")});
+  $("#hStage").textContent="KOMPONEN · "+c.g.toUpperCase();$("#hName").textContent=c.n;
+  $("#cG").textContent=c.g.toUpperCase();$("#cN").textContent=c.n;$("#cF").textContent=c.f;
+  var t=$("#cT");t.textContent=c.t||"";t.hidden=!c.t;
+  $("#cinfo").hidden=false;
+  var btn=document.querySelector('#drawer button[data-id="'+id+'"]');if(btn)btn.classList.add("on");
+  $("#ctag").textContent=c.n;
+  refreshShell();updateHero();
+}
+function updateHero(){
+  var h=(S.stage===0&&!selId);$("#hero").classList.toggle("off",!h);$("#hudT").classList.toggle("off",h);
+  gsap.to(cam,{duration:1,ease:"power2.inOut",ox:(h&&window.innerWidth>940)?-0.09:0});
+}
+var HOT=[["wheelhouse","Anjungan",[-12,10.6,7],1],["funnel","Cerobong",[-19.8,14.9,-1.5],1],["sternRamp","Ramp buritan",[-26.3,1.8,0],1],["cargo","Muatan beroda",[34,4.4,0],1],["windlass","Windlass",[66,3.6,0],1],["tiller","Steering gear",[-22,-1.7,0],1],["prop","Baling-baling",[-20.7,-5,0],0],["thruster","Bow thruster",[61,-5,0],0]],hots=[];
+function buildHotspots(){HOT.forEach(function(h){var b=document.createElement("button");b.type="button";b.className="hot";b.innerHTML="<i>+</i><span>"+h[1]+"</span>";
+  b.addEventListener("click",function(e){e.stopPropagation();selectComp(h[0])});$("#hot").appendChild(b);hots.push({el:b,p:new THREE.Vector3(h[2][0],h[2][1],h[2][2]),always:h[3]})})}
+function buildDrawer(){
+  var dr=$("#drawer");
+  GROUPS.forEach(function(g){
+    var h=document.createElement("h4");h.textContent=g;dr.appendChild(h);
+    Object.keys(CAT).forEach(function(id){if(CAT[id].g!==g)return;
+      var b=document.createElement("button");b.type="button";b.dataset.id=id;b.textContent=CAT[id].n;
+      b.addEventListener("click",function(){selectComp(id);if(window.innerWidth<700)toggleDrawer(false)});dr.appendChild(b)});
+  });
+}
+function toggleDrawer(on){var dr=$("#drawer");if(on===undefined)on=dr.hidden;dr.hidden=!on;$("#bComp").setAttribute("aria-expanded",String(on))}
+function effVisible(o){while(o){if(!o.visible)return false;o=o.parent}return true}
+var ray=new THREE.Raycaster(),ndc=new THREE.Vector2();
+function doPick(e){
+  var cv=$("#gl"),r=cv.getBoundingClientRect();
+  ndc.set(((e.clientX-r.left)/r.width)*2-1,-((e.clientY-r.top)/r.height)*2+1);
+  ray.setFromCamera(ndc,camera);
+  var hits=ray.intersectObjects(pickList,false);
+  for(var i=0;i<hits.length;i++){var m=hits[i].object;if(!effVisible(m))continue;if(m.material.opacity<0.25)continue;selectComp(m.userData.comp);return}
+}
+
+/* ---------- kamera & tahap ---------- */
+function goStage(n){
+  clearSel();
+  S.stage=n;
+  var c=CAMS[n];
+  if(tweenCam)tweenCam.kill();
+  tweenCam=gsap.to(cam,{duration:1.5,ease:"power2.inOut",px:c.px,py:c.py,pz:c.pz,lx:c.lx,ly:c.ly,lz:c.lz,mix:c.mix,fov:c.fov});
+  gsap.to(orbit,{duration:0.8,yaw:0,pitch:0,zoom:n===8?1:1,ease:"power2.out"});
+  var st=STAGES[n];
+  $("#hStage").textContent=n?("TAHAP "+n+" / 8 · "+st.k):"TAHAP 0";
+  $("#hName").textContent=st.n;
+  [].forEach.call(stepper.children,function(b){var i=+b.dataset.i;b.removeAttribute("aria-current");b.classList.toggle("done",i<n);if(i===n)b.setAttribute("aria-current","step")});
+  renderExplain();
+  /* sorot material */
+  for(var k in stageMats){stageMats[k].forEach(function(m){var on=(+k===n);gsap.to(m,{duration:0.6,emissiveIntensity:on?0.35:0,opacity:(n===0||n===8||on)?m.userData.base:m.userData.base*0.28})})}
+  labels.forEach(function(l){l.on=(l.stage===n)});
+  refreshShell();updateHero();
+  if(n===3)firePulse("p1",3,0xf0b94e);
+  if(n===2)firePulse("sig",2,0x2aa7e0);
+}
+function firePulse(key,slot,color){
+  if(!glOK)return;var c=pulses.curves[key],pm=pulses.list[slot%3];if(!c)return;
+  pm.material.color.set(color);pm.visible=true;var o={t:0};
+  gsap.to(o,{t:1,duration:Math.max(1.2,(DWELL[S.stage]||3)*0.8/S.speed),ease:"power1.inOut",onUpdate:function(){pm.position.copy(c.getPoint(o.t))},onComplete:function(){pm.visible=false}});
+  if(key==="p1"){var pm2=pulses.list[(slot+1)%3],o2={t:0};pm2.material.color.set(color);pm2.visible=true;gsap.to(o2,{t:1,duration:Math.max(1.2,(DWELL[S.stage]||3)*0.8/S.speed),ease:"power1.inOut",onUpdate:function(){pm2.position.copy(pulses.curves.p2.getPoint(o2.t))},onComplete:function(){pm2.visible=false}})}
+}
+function bridgeTurn(v){if(!wheel)return;gsap.to(wheel.rotation,{duration:1.4,x:v*5*D2R,ease:"power2.inOut"})}
+
+function renderExplain(){
+  var st=STAGES[S.stage],ex=$("#explain");
+  ex.innerHTML="<h2>Yang terjadi di tahap ini</h2><p class='k'>"+(S.stage?("TAHAP "+S.stage+" / 8 · "+st.k):"GAMBARAN UMUM")+"</p><h3>"+st.n+"</h3><p>"+st.t+"</p><div class='live' id='live'></div><div class='nav2'><button class='btn alt' type='button' id='bPrev'>Sebelumnya</button><button class='btn alt' type='button' id='bNext'>Berikutnya</button></div>";
+  $("#bPrev").onclick=function(){S.tourOn=false;$("#tour").checked=false;goStage(Math.max(0,S.stage-1))};
+  $("#bNext").onclick=function(){S.tourOn=false;$("#tour").checked=false;goStage(Math.min(8,S.stage+1))};
+  updateLive();
+}
+function updateLive(){var el=$("#live");if(el)el.textContent=STAGES[S.stage].live()}
+
+/* orbit manual */
+(function(){
+  var down=false,lx=0,ly=0,cv=$("#gl");
+  var sx=0,sy=0;
+  cv.addEventListener("pointerdown",function(e){down=true;sx=lx=e.clientX;sy=ly=e.clientY;try{cv.setPointerCapture(e.pointerId)}catch(_){}});
+  cv.addEventListener("pointermove",function(e){if(!down)return;orbit.yaw-=(e.clientX-lx)*0.006;orbit.pitch=Math.max(-0.9,Math.min(0.9,orbit.pitch+(e.clientY-ly)*0.005));lx=e.clientX;ly=e.clientY});
+  cv.addEventListener("pointerup",function(e){down=false;if(Math.hypot(e.clientX-sx,e.clientY-sy)<5&&glOK)doPick(e)});cv.addEventListener("pointercancel",function(){down=false});
+  cv.addEventListener("wheel",function(e){e.preventDefault();orbit.zoom=Math.max(0.35,Math.min(2.2,orbit.zoom*(e.deltaY>0?1.08:0.92)))},{passive:false});
+})();
+
+/* ---------- alarm ---------- */
+function showAlarm(t,info){var a=$("#alarm");a.className="alarm on"+(info?" info":"");a.innerHTML=t}
+function hideAlarm(){$("#alarm").className="alarm"}
+
+/* ---------- tombol gangguan ---------- */
+$("#bAux").addEventListener("click",function(){
+  S.mode="aux";S.cmd=S.rud;S.scn="normal";S.bypass=false;$("#scn").value="normal";S.fsm="S0";S.noFlow=0;S.pump=["standby","standby"];
+  hideAlarm();$("#faultRow").hidden=true;
+  log("<b>Steering darurat aktif</b>: kontrol lokal di ruang kemudi, batas 15°, laju 0,5°/s");
+  showAlarm("Steering darurat (auxiliary) aktif. Batas ±15°, laju 0,5°/s. Kirim ulang perintah.",true);
+  $("#cmdMsg").className="msg ok";$("#cmdMsg").textContent="Mode darurat. Maksimal 15°. Coba: stbd 15.";
+  setTimeout(hideAlarm,6000);
+});
+$("#bReset").addEventListener("click",function(){S.fsm="S0";S.noFlow=0;hideAlarm();$("#faultRow").hidden=true;log("<b>S0</b> Reset operator");S.cmd=S.rud});
+$("#cmdForm").addEventListener("submit",function(e){e.preventDefault();submitCmd()});
+$("#tour").addEventListener("change",function(){S.tourOn=this.checked});
+[].forEach.call(document.querySelectorAll("[data-spd]"),function(b){b.addEventListener("click",function(){S.speed=+b.dataset.spd;[].forEach.call(document.querySelectorAll("[data-spd]"),function(x){x.setAttribute("aria-pressed",String(x===b))})})});
+
+/* ---------- logika FSM + dinamika ---------- */
+function setFsm(k,why){if(S.fsm===k)return;S.fsm=k;log("<b>"+k+"</b> "+FSM_N[k]+(why?" · "+why:""))}
+function step(dt){
+  S.time+=dt;
+  var rate=S.mode==="aux"?0.5:2.32, lim=S.mode==="aux"?15:35;
+  var e=S.cmd-S.rud;
+  /* tur */
+  if(S.tourOn&&S.fsm!=="S0"&&S.stage>=1&&S.stage<8){S.tourT+=dt;if(S.tourT>=DWELL[S.stage]){S.tourT=0;goStage(S.stage+1)}}
+  if(S.fsm==="S1"){
+    S.tS1+=dt;
+    if(S.scn==="pump1"&&S.mode==="main"&&!S.failDone&&S.tS1>=S.failAt){S.failDone=true;S.pump[0]="fail";S.chgAt=S.tS1+1.4;log("<b>ALARM</b> Pompa 1 trip (overload)");showAlarm("Pompa 1 trip. Menunggu changeover ke pompa 2…");}
+    if(S.chgAt>0&&S.tS1>=S.chgAt){S.chgAt=-1;S.pump[1]="run";log("Changeover: pompa 2 jalan");showAlarm("Pompa 2 mengambil alih. Perintah dilanjutkan.",true);setTimeout(hideAlarm,3500)}
+    if(S.tS1>=S.gateAt&&S.chgAt<0){
+      if(Math.abs(e)<=EPS){setFsm("S3","|e| ≤ ε, tidak perlu gerak")}
+      else setFsm("S2","|e| = "+fmt(Math.abs(e))+"° > ε");
+      S.noFlow=0;
+    }
+  }
+  var flow=S.mode==="aux"||((S.pump[0]==="run"||S.pump[1]==="run")&&!S.bypass);
+  S.rate=0;
+  if(S.fsm==="S2"){
+    if(!flow){
+      S.noFlow+=dt;
+      if(S.noFlow>=3.5){
+        setFsm("S4","ram tidak bergerak");
+        S.reason=S.bypass?"Katup bypass terbuka: pompa jalan, tekanan tidak naik, rudder tidak bergerak.":"Tidak ada pompa yang menghasilkan tekanan.";
+        showAlarm("<b>S4 Gangguan.</b> "+S.reason+" Ini pola kasus CMA CGM Puccini (ATSB, 2025). Aktifkan steering darurat.");
+        $("#faultRow").hidden=false;log("<b>ALARM</b> "+S.reason);
+      }
+    }else{
+      var d=Math.min(Math.abs(e),rate*dt);S.rud+=Math.sign(e)*d;S.rate=Math.sign(e)*d/dt;
+      if(Math.abs(S.cmd-S.rud)<=EPS){setFsm("S3","|e| ≤ ε = 0,5°, katup dikunci")}
+    }
+  }
+  /* kapal */
+  var tgt=K*S.rud;S.r+=(tgt-S.r)*(dt/T);S.psi+=S.r*dt;
+  var a=S.psi*D2R;S.x+=SPEED_V*Math.cos(a)*dt;S.z+=SPEED_V*Math.sin(a)*dt;
+  /* putaran pompa */
+  for(var i=0;i<2;i++){
+    var on=(S.pump[i]==="run")&&((S.fsm==="S2")||(S.fsm==="S1"&&S.tS1>(S.tourOn?DWELL[1]+DWELL[2]:1)));
+    var idle=(S.pump[i]==="run"&&S.fsm!=="S4"&&!on)?0.15:0;
+    var target=on?(S.bypass?14:12):idle;
+    S.pumpSpin[i]+=(target-S.pumpSpin[i])*Math.min(1,dt*3);
+  }
+}
+
+function ui(){
+  ["S0","S1","S2","S3","S4"].forEach(function(k){$("#fs"+k).classList.toggle("on",S.fsm===k)});
+  var e=S.cmd-S.rud;
+  $("#rCmd").textContent=fmt(S.cmd)+"°";$("#rRud").textContent=fmt(S.rud)+"°";
+  var re=$("#rErr");re.textContent=fmt(e)+"°";re.className=Math.abs(e)>EPS?"hot":"";
+  $("#rRate").textContent=fmt(Math.abs(S.rate),2)+"°/s";$("#rRot").textContent=fmt(S.r,2)+"°/s";
+  $("#rMode").textContent=S.mode==="aux"?"DARURAT":"UTAMA";
+  var g={S0:"Menunggu perintah. Rudder di "+fmt(S.rud)+"°.",S1:"Perintah diteruskan: validasi batas, daya, dan pompa.",S2:"|e| = "+fmt(Math.abs(e))+"° > ε = 0,5°  →  ram digerakkan",S3:"|e| ≤ ε = 0,5°  →  katup dikunci, rudder ditahan",S4:S.reason||"Gangguan"};
+  $("#guard").textContent=g[S.fsm];
+  $("#hHdg").textContent=hdgTxt();$("#needle").setAttribute("transform","rotate("+(S.psi%360)+")");
+  updateLive();
+}
+
+/* ---------- animasi per frame ---------- */
+var last=0,fbT=0,tmpV=new THREE.Vector3();
+function frame(ts){
+  requestAnimationFrame(frame);
+  var dt=Math.min(0.05,(ts-last)/1000||0);last=ts;
+  var sdt=dt*S.speed;
+  step(sdt);
+  if(glOK)render(sdt,dt);
+  ui();
+}
+function render(dt,rdt){
+  /* kapal */
+  ship.position.set(S.x,0,S.z);ship.rotation.y=-S.psi*D2R;ship.updateMatrixWorld(true);
+  ocean.position.x=Math.round(S.x/10)*10;ocean.position.z=Math.round(S.z/10)*10;
+  /* jejak */
+  var sp=ship.localToWorld(new THREE.Vector3(-26,WL,0));
+  if(!wakePts.length||wakePts[wakePts.length-1].distanceTo(sp)>0.9){wakePts.push(sp);if(wakePts.length>590)wakePts.shift();
+    var pa=wakeGeo.attributes.position.array;for(var i=0;i<wakePts.length;i++){pa[i*3]=wakePts[i].x;pa[i*3+1]=wakePts[i].y;pa[i*3+2]=wakePts[i].z}wakeGeo.attributes.position.needsUpdate=true;wakeGeo.setDrawRange(0,wakePts.length)}
+  /* sudut komponen */
+  stockG.rotation.y=S.rud*D2R;
+  gaugeNeedle.rotation.x=S.rud*2*D2R;
+  var L=2.8,zEnd=-L*Math.sin(S.rud*D2R);
+  rams.xh.position.z=zEnd;
+  var ps=rams.port,ss=rams.stbd;
+  var tipS=zEnd+0.55,tipP=zEnd-0.55,lenS=Math.max(0.05,2.0-tipS),lenP=Math.max(0.05,tipP+2.0);
+  ss.rod.scale.z=lenS;ss.rod.position.z=2.0-lenS/2;
+  ps.rod.scale.z=lenP;ps.rod.position.z=-2.0+lenP/2;
+  /* tekanan */
+  var e=S.cmd-S.rud,mv=S.fsm==="S2"&&!S.bypass&&(S.pump[0]==="run"||S.pump[1]==="run");
+  var pressS=mv&&e>0,pressP=mv&&e<0;
+  rams.stbd.body.material.color.set(pressS?0xe4372b:0x6d9ab8);rams.port.body.material.color.set(pressP?0xe4372b:0x6d9ab8);
+  rams.stbd.body.material.emissive.set(pressS?0xe4372b:0x6d9ab8);rams.port.body.material.emissive.set(pressP?0xe4372b:0x6d9ab8);
+  /* panah gaya ram */
+  arrows.ram.visible=mv&&(S.stage===5||S.stage===6);
+  if(arrows.ram.visible){var dir=new THREE.Vector3(0,0,e>0?-1:1);arrows.ram.position.set(-20.2,-0.95,zEnd+(e>0?1.3:-1.3));arrows.ram.setDirection(dir);arrows.ram.setLength(1.5,0.5,0.35)}
+  var fz=Math.abs(S.rud)/35*2.6;arrows.rud.visible=fz>0.25&&S.stage===7;
+  if(arrows.rud.visible){arrows.rud.setDirection(new THREE.Vector3(0,0,S.rud>0?-1:1));arrows.rud.position.set(-24.2,-6.2,S.rud>0?0.6:-0.6);arrows.rud.setLength(fz,0.7,0.5)}
+  applyShell();
+  propG.rotation.x+=dt*5;radarG.rotation.y+=rdt*1.6;
+  /* pompa */
+  pumps.forEach(function(p,i){p.rot.rotation.x+=S.pumpSpin[i]*dt;var st=S.pump[i];p.lamp.material.color.set(st==="run"?0x3ccb8a:st==="fail"?0xff4a40:0x6b7a8c)});
+  led.st1.material.color.set(S.pump[0]==="run"?0x3ccb8a:S.pump[0]==="fail"?0xff4a40:0x6b7a8c);
+  led.st2.material.color.set(S.pump[1]==="run"?0x3ccb8a:S.pump[1]==="fail"?0xff4a40:0x6b7a8c);
+  led.ctl.material.color.set(S.fsm==="S4"?0xff4a40:S.fsm==="S2"?0xff9a3c:0x3ccb8a);
+  bypassHandle.rotation.y+=((S.bypass?Math.PI/2:0)-bypassHandle.rotation.y)*Math.min(1,dt*4);
+  bypassHandle.userData.mesh.material.color.set(S.bypass?0xff4a40:0x3ccb8a);
+  /* aliran oli */
+  var fl=(S.pump[0]==="run"||S.pump[1]==="run")&&S.fsm!=="S4"&&S.fsm!=="S0"&&S.fsm!=="S3"&&(S.fsm==="S2"||S.stage>=4||!S.tourOn);
+  var pr={A:S.pump[0]==="run"&&fl?1:0,B:S.pump[1]==="run"&&fl?1:0,C:0,D:0,E:0};
+  if(fl&&S.bypass)pr.E=1;
+  else if(S.fsm==="S2"&&fl){if(e>0){pr.C=1;pr.D=-1}else{pr.D=1;pr.C=-1}}
+  Object.keys(pipes).forEach(function(k){
+    var p=pipes[k],d=pr[k]||0;p.dir=d;p.mat.color.set(d>=0?0xff5a4d:0x3a9bff);
+    p.parts.forEach(function(q){
+      q.m.visible=d!==0;
+      if(d!==0){q.t+=d*dt*0.35;q.t-=Math.floor(q.t);q.m.position.copy(p.curve.getPoint(q.t))}
+    });
+  });
+  /* umpan balik */
+  if(S.fsm==="S2"){fbT+=rdt;if(fbT>1.6){fbT=0;firePulse("fb",2,0x2aa7e0)}}
+  /* kamera */
+  var pS=ship.localToWorld(new THREE.Vector3(cam.px,cam.py,cam.pz)),lS=ship.localToWorld(new THREE.Vector3(cam.lx,cam.ly,cam.lz));
+  var pW=new THREE.Vector3(S.x+cam.px,cam.py,S.z+cam.pz),lW=new THREE.Vector3(S.x+cam.lx,cam.ly,S.z+cam.lz);
+  var pos=pS.lerp(pW,cam.mix),look=lS.lerp(lW,cam.mix);
+  var off=pos.sub(look).multiplyScalar(orbit.zoom);
+  var ax=new THREE.Vector3(0,1,0);off.applyAxisAngle(ax,orbit.yaw);
+  var right=new THREE.Vector3().crossVectors(off,ax).normalize();off.applyAxisAngle(right,-orbit.pitch*0.6);
+  camera.position.copy(look).add(off);camera.lookAt(look);
+  camera.fov=cam.fov;var vw=renderer.domElement.clientWidth,vh=renderer.domElement.clientHeight;
+  if(Math.abs(cam.ox)>0.001)camera.setViewOffset(vw,vh,cam.ox*vw,0,vw,vh);else camera.clearViewOffset();
+  camera.updateProjectionMatrix();
+  sun.position.set(S.x-70,130,S.z+90);sun.target.position.set(S.x,0,S.z);sun.target.updateMatrixWorld();
+  renderer.render(scene,camera);
+  /* label */
+  var ct=$("#ctag");
+  if(selId){tmpV.copy(selTop);ship.localToWorld(tmpV);tmpV.project(camera);var cw=renderer.domElement.clientWidth,ch=renderer.domElement.clientHeight;
+    if(tmpV.z<1){ct.style.opacity=1;ct.style.left=((tmpV.x*0.5+0.5)*cw)+"px";ct.style.top=((-tmpV.y*0.5+0.5)*ch)+"px"}else ct.style.opacity=0}
+  else ct.style.opacity=0;
+  var showH=(S.stage===0&&!selId);
+  var w=renderer.domElement.clientWidth,h=renderer.domElement.clientHeight;
+  hots.forEach(function(q){
+    var ok=showH&&(q.always||shell.ghost>0.5);
+    tmpV.copy(q.p);ship.localToWorld(tmpV);tmpV.project(camera);
+    if(!ok||tmpV.z>1){q.el.style.opacity=0;q.el.style.pointerEvents="none";return}
+    q.el.style.opacity=1;q.el.style.pointerEvents="auto";q.el.style.left=((tmpV.x*0.5+0.5)*w)+"px";q.el.style.top=((-tmpV.y*0.5+0.5)*h)+"px";
+  });
+  labels.forEach(function(l){
+    var show=l.on&&S.stage!==0;
+    if(!show){l.el.style.opacity=0;return}
+    tmpV.copy(l.p);ship.localToWorld(tmpV);tmpV.project(camera);
+    if(tmpV.z>1||tmpV.z<-1){l.el.style.opacity=0;return}
+    l.el.style.opacity=1;l.el.style.left=((tmpV.x*0.5+0.5)*w)+"px";l.el.style.top=((-tmpV.y*0.5+0.5)*h)+"px";
+  });
+}
+
+/* ---------- start ---------- */
+setupGL();
+if(glOK){
+  new ResizeObserver(resize).observe($("#vp"));
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change",applyTheme);
+  new MutationObserver(applyTheme).observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]});
+}
+buildDrawer();buildHotspots();
+$("#bStart").addEventListener("click",function(){submitCmd()});
+$("#bOver").addEventListener("click",function(){toggleDrawer(true)});
+$("#bComp").addEventListener("click",function(){toggleDrawer()});
+$("#cx").addEventListener("click",function(){clearSel();goStage(S.stage);refreshShell()});
+[].forEach.call(document.querySelectorAll("[data-shell]"),function(b){b.addEventListener("click",function(){shellMode=b.dataset.shell;[].forEach.call(document.querySelectorAll("[data-shell]"),function(x){x.setAttribute("aria-pressed",String(x===b))});refreshShell()})});
+goStage(0);
+if(glOK)applyShell();
+log("Sistem siap. Mode utama, rudder di midships. Kirim perintah.");
+window.__sim={shell:shell,selectComp:selectComp,CAT:CAT,S:S,issue:issue,goStage:goStage,parseCmd:parseCmd,submit:submitCmd};
+requestAnimationFrame(frame);
+})();
+</script>
